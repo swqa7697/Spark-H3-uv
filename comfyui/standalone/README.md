@@ -9,10 +9,18 @@ It provides `fidelity`, `speed`, `custom`, and `dense` modes, supports KJNodes
 low-VRAM workflows, and lets dense warmup steps use the inherited, Kitchen,
 Sage, or PyTorch SDPA attention backend.
 
-In the v0.1.3 Linux benchmark using the LightX2V 768p 8-step workflow, Spark-H3
-reached 2.05–2.42x the dense baseline in `fidelity` mode and 3.15–4.62x in
-`speed` mode across RTX 3090, RTX 4090, and RTX PRO 6000 Blackwell GPUs. See
-the release notes for the complete test configuration and quality caveats.
+The v0.1.3 Linux benchmark used ComfyUI 0.38.2 and the LightX2V 768p 8-step
+LoRA workflow at 1344×768, 345 frames, and 24 FPS. It used
+`topk_ratio=20%`, `warmup_steps=2`, and PyTorch SDPA for dense attention.
+
+| GPU | Fidelity vs. Dense | Speed vs. Dense |
+| --- | ---: | ---: |
+| RTX 3090 (SM86) | **2.42×** | **4.62×** |
+| RTX 4090 (SM89) | **2.37×** | **4.35×** |
+| RTX PRO 6000 Blackwell (SM120) | **2.05×** | **3.15×** |
+
+Additional Linux tests on RTX 3090 and RTX PRO 6000 Blackwell showed slightly
+higher speedup ratios with ComfyUI 0.39.2, which is the recommended release.
 
 The Comfy Registry package includes all supported Linux and Windows wheels. Its
 installer selects the matching operating system, GPU architecture, and
