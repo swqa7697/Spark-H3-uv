@@ -2,12 +2,6 @@ name: Publish Comfy Registry package
 
 on:
   workflow_dispatch:
-    inputs:
-      replace_existing:
-        description: Replace the existing Registry version after validation
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -72,7 +66,7 @@ jobs:
         run: >-
           python tools/build_comfyui_package.py
           --registry
-          --version 0.1.3
+          --version 0.1.4
           --publisher-id zechengtang
           --output-dir dist/registry
           --kernel-wheel-dir "$RUNNER_TEMP/registry-wheels"
@@ -90,7 +84,7 @@ jobs:
           identity = json.loads((package / "spark_h3_build.json").read_text())
 
           assert metadata["project"]["name"] == "comfyui-spark-h3"
-          assert metadata["project"]["version"] == "0.1.3"
+          assert metadata["project"]["version"] == "0.1.4"
           assert metadata["project"]["requires-python"] == ">=3.12"
           assert metadata["tool"]["comfy"]["PublisherId"] == "zechengtang"
           assert identity["distribution"] == "registry"
@@ -113,42 +107,11 @@ jobs:
         working-directory: dist/registry/ComfyUI-Spark-H3
         run: comfy node validate
 
-      - name: Remove the existing version after successful validation
-        if: ${{ inputs.replace_existing }}
-        env:
-          REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          from urllib.parse import quote
-          from urllib.request import Request, urlopen
-
-          version_url = "https://api.comfy.org/nodes/comfyui-spark-h3/versions/0.1.3"
-          with urlopen(version_url, timeout=30) as response:
-              version_id = json.load(response)["id"]
-          delete_url = (
-              "https://api.comfy.org/publishers/zechengtang/nodes/"
-              f"comfyui-spark-h3/versions/{quote(version_id)}"
-          )
-          request = Request(
-              delete_url,
-              method="DELETE",
-              headers={
-                  "Authorization": f"Bearer {os.environ['REGISTRY_ACCESS_TOKEN']}"
-              },
-          )
-          with urlopen(request, timeout=30) as response:
-              if response.status != 204:
-                  raise RuntimeError(f"unexpected delete response: {response.status}")
-          print("Removed the existing Registry version 0.1.3")
-          PY
-
-      - name: Publish version 0.1.3
+      - name: Publish Registry version 0.1.4
         working-directory: dist/registry/ComfyUI-Spark-H3
         env:
           REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
           COMFY_NODE_CHANGELOG: >-
-            Adds SM86 support, KJNodes low-VRAM compatibility, quick mode
-            presets, and selectable dense warmup attention backends.
+            Refines the package introduction and performance table. Runtime
+            code and backend wheels are unchanged from v0.1.3.
         run: comfy node publish --token "$REGISTRY_ACCESS_TOKEN"
