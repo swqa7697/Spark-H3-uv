@@ -103,7 +103,8 @@ def fused_direction128(left, right, left_capacity=None, right_capacity=None):
 @triton.jit
 def _seeds(X, DIST, ACTIVE, LEFT, RIGHT,
            L:tl.constexpr, D:tl.constexpr, S:tl.constexpr, BD:tl.constexpr):
-    b=tl.program_id(0); node=tl.program_id(1)
+    b=tl.program_id(0)
+    node=tl.program_id(1)
     ids=tl.arange(0,L)
     w=tl.load(ACTIVE+(b*S+node)*L+ids)
     distance=tl.load(DIST+b*L*L+ids[:,None]*L+ids[None,:])
@@ -127,8 +128,10 @@ def _seeds(X, DIST, ACTIVE, LEFT, RIGHT,
 @triton.jit
 def _partition(ACTIVE, ORDER, CAP, LEFT, RIGHT, LF, RF,
                L:tl.constexpr, S:tl.constexpr, FLOAT_OUTPUT:tl.constexpr):
-    b=tl.program_id(0);node=tl.program_id(1)
-    ids=tl.arange(0,L);base=(b*S+node)*L
+    b=tl.program_id(0)
+    node=tl.program_id(1)
+    ids=tl.arange(0,L)
+    base=(b*S+node)*L
     order=tl.load(ORDER+base+ids)
     weight=tl.load(ACTIVE+base+order)
     before=tl.cumsum(weight,axis=0)-weight
@@ -153,7 +156,8 @@ def proxy_seeds(x,distance,active):
 
 def partition_weights(active,order,left_capacity,*,float_output=False):
     batch,nodes,landmarks=active.shape
-    left=torch.empty_like(active);right=torch.empty_like(active)
+    left=torch.empty_like(active)
+    right=torch.empty_like(active)
     lf=torch.empty_like(active,dtype=torch.float32) if float_output else None
     rf=torch.empty_like(lf) if float_output else None
     _partition[(batch,nodes)](active,order.contiguous(),left_capacity,left,right,lf,rf,

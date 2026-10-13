@@ -12,6 +12,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "ComfyUI-Spark-H3"
 PACKAGE_BUILD_IDENTITY = "spark_h3_build.json"
 DEFAULT_VERSION = "0.1.3"
+DEFAULT_PUBLISHER_ID = "zechengtang"
 RELEASE_CUDA_TAGS = ("cu130",)
 EXPERIMENTAL_CUDA_TAGS = ("cu128", "cu129")
 KNOWN_CUDA_TAGS = EXPERIMENTAL_CUDA_TAGS + RELEASE_CUDA_TAGS
@@ -235,6 +236,167 @@ def assemble(
     return target
 
 
+def assemble_registry(
+    output_dir: Path,
+    *,
+    version: str,
+    publisher_id: str = DEFAULT_PUBLISHER_ID,
+    kernel_wheels: tuple[Path, ...],
+) -> Path:
+    """Create one self-contained Registry package for every release target."""
+
+    target = assemble(
+        output_dir,
+        version=version,
+        publisher_id=publisher_id,
+        architecture="sm120",
+        cuda_tag="cu130",
+        platform_tag="linux-x86_64",
+    )
+
+    # Registry publishes one archive per node version. Keep every architecture
+    # registered and bundle every platform wheel so installation stays within
+    # the Registry download.
+    shutil.copy2(REPOSITORY_ROOT / "__init__.py", target / "__init__.py")
+    metadata_path = target / "pyproject.toml"
+    metadata = metadata_path.read_text(encoding="utf-8")
+    metadata_path.write_text(
+        metadata.replace('requires-python = ">=3.10"', 'requires-python = ">=3.12"'),
+        encoding="utf-8",
+    )
+
+    wheelhouse = target / "wheelhouse"
+    wheelhouse.mkdir()
+    coverage: dict[tuple[str, str, str], Path] = {}
+    for wheel in kernel_wheels:
+        identity = _registry_wheel_identity(wheel)
+        if identity in coverage:
+            raise ValueError(
+                f"duplicate Registry wheel target {identity}: "
+                f"{coverage[identity].name}, {wheel.name}"
+            )
+        coverage[identity] = wheel
+        shutil.copy2(wheel, wheelhouse / wheel.name)
+    expected_coverage = {
+        (base, architecture, platform_tag)
+        for base in ("0.2.36", "0.2.37")
+        for architecture in PACKAGE_SPARK_NODES
+        for platform_tag in PACKAGE_PLATFORMS
+    }
+    if set(coverage) != expected_coverage:
+        missing = sorted(expected_coverage - set(coverage))
+        unexpected = sorted(set(coverage) - expected_coverage)
+        raise ValueError(
+            f"Registry wheel coverage mismatch: missing={missing!r}, "
+            f"unexpected={unexpected!r}"
+        )
+
+    workflows = target / "workflows"
+    shutil.rmtree(workflows)
+    workflows.mkdir()
+    for architecture, spark_node in PACKAGE_SPARK_NODES.items():
+        for name in WORKFLOWS:
+            source = REPOSITORY_ROOT / "workflows" / name
+            workflow = json.loads(source.read_text(encoding="utf-8"))
+            for node in workflow.get("nodes", ()):
+                if node.get("type") != PACKAGE_SPARK_NODE:
+                    continue
+                node["type"] = spark_node
+                properties = node.setdefault("properties", {})
+                properties["cnr_id"] = PACKAGE_CNR_ID
+                properties["ver"] = version
+            destination = workflows / f"{Path(name).stem}_{architecture}.json"
+            destination.write_text(
+                json.dumps(workflow, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+    (target / PACKAGE_BUILD_IDENTITY).write_text(
+        json.dumps(
+            {
+                "distribution": "registry",
+                "architectures": sorted(PACKAGE_SPARK_NODES),
+                "cuda_tag": "cu130",
+                "platforms": sorted(PACKAGE_PLATFORMS),
+                "kernel_wheels": sorted(wheel.name for wheel in kernel_wheels),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return target
+
+
+def _registry_wheel_identity(wheel: Path) -> tuple[str, str, str]:
+    if wheel.suffix != ".whl" or not wheel.is_file():
+        raise ValueError(f"Registry kernel wheel does not exist: {wheel}")
+    try:
+        from packaging.utils import parse_wheel_filename
+    except ImportError:
+        from pip._vendor.packaging.utils import parse_wheel_filename
+    try:
+        distribution, version, _, tags = parse_wheel_filename(wheel.name)
+    except ValueError as error:
+        raise ValueError(f"invalid Registry wheel filename: {wheel.name}") from error
+    if distribution != "comfy-kitchen" or version.base_version not in {
+        "0.2.36",
+        "0.2.37",
+    }:
+        raise ValueError(f"unsupported Registry wheel: {wheel.name}")
+    architecture = next(
+        (
+            name
+            for name, prefix in BACKEND_LOCAL_VERSION_PREFIXES.items()
+            if version.local == f"{prefix}.cu130.1"
+        ),
+        None,
+    )
+    if architecture is None:
+        raise ValueError(f"unsupported Registry wheel identity: {wheel.name}")
+    wheel_platforms = {tag.platform for tag in tags}
+    platforms = [
+        platform_tag
+        for platform_tag in PACKAGE_PLATFORMS
+        if any(
+            _wheel_platform_matches(wheel_platform, platform_tag)
+            for wheel_platform in wheel_platforms
+        )
+    ]
+    if len(platforms) != 1:
+        raise ValueError(f"unsupported Registry wheel platform: {wheel.name}")
+    return version.base_version, architecture, platforms[0]
+
+
+def make_registry_zip(package_dir: Path, output_dir: Path, *, version: str) -> Path:
+    """Create a flat preview archive matching the Registry package layout."""
+
+    archive = output_dir / f"{PACKAGE_NAME}-{version}-registry.zip"
+    if archive.exists():
+        archive.unlink()
+    with zipfile.ZipFile(
+        archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9
+    ) as bundle:
+        for path in sorted(package_dir.rglob("*")):
+            if not path.is_file():
+                continue
+            info = zipfile.ZipInfo(
+                path.relative_to(package_dir).as_posix(),
+                date_time=(2026, 1, 1, 0, 0, 0),
+            )
+            info.compress_type = zipfile.ZIP_DEFLATED
+            mode = stat.S_IFREG | (
+                0o755
+                if path.name
+                in {"install.py", "kernel_builder.py", "convert_larryvrh_lora_comfyui.py"}
+                else 0o644
+            )
+            info.external_attr = mode << 16
+            bundle.writestr(info, path.read_bytes())
+    return archive
+
+
 def make_zip(
     package_dir: Path,
     output_dir: Path,
@@ -382,8 +544,12 @@ def main(argv: list[str] | None = None) -> int:
         "--platform",
         dest="platform_tag",
         choices=tuple(PACKAGE_PLATFORMS),
-        required=True,
         help="target OS/CPU identity encoded into the archive and build manifest",
+    )
+    parser.add_argument(
+        "--registry",
+        action="store_true",
+        help="build one cross-platform Comfy Registry package",
     )
     parser.add_argument(
         "--experimental-cuda",
@@ -403,7 +569,16 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         help="bundle a prebuilt backend wheel; may be repeated",
     )
+    parser.add_argument(
+        "--kernel-wheel-dir",
+        type=Path,
+        help="directory containing all 12 wheels for a Registry package",
+    )
     args = parser.parse_args(argv)
+    if not args.registry and args.kernel_wheel_dir is not None:
+        parser.error("--kernel-wheel-dir is only valid with --registry")
+    if not args.registry and args.platform_tag is None:
+        parser.error("--platform is required unless --registry is used")
     try:
         validate_cuda_tag(
             args.cuda_tag,
@@ -414,17 +589,32 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(str(error))
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    package = assemble(
-        output,
-        version=args.version,
-        publisher_id=args.publisher_id,
-        kernel_wheels=tuple(path.resolve() for path in args.kernel_wheel),
-        architecture=args.architecture,
-        cuda_tag=args.cuda_tag or "cu130",
-        platform_tag=args.platform_tag,
-    )
+    if args.registry:
+        registry_wheels = [path.resolve() for path in args.kernel_wheel]
+        if args.kernel_wheel_dir is not None:
+            registry_wheels.extend(
+                sorted(args.kernel_wheel_dir.resolve().glob("*.whl"))
+            )
+        package = assemble_registry(
+            output,
+            version=args.version,
+            publisher_id=args.publisher_id,
+            kernel_wheels=tuple(registry_wheels),
+        )
+    else:
+        package = assemble(
+            output,
+            version=args.version,
+            publisher_id=args.publisher_id,
+            kernel_wheels=tuple(path.resolve() for path in args.kernel_wheel),
+            architecture=args.architecture,
+            cuda_tag=args.cuda_tag or "cu130",
+            platform_tag=args.platform_tag,
+        )
     print(package)
-    if not args.no_zip:
+    if not args.no_zip and args.registry:
+        print(make_registry_zip(package, output, version=args.version))
+    elif not args.no_zip:
         print(
             make_zip(
                 package,

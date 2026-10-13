@@ -144,7 +144,8 @@ def tree_frontiers(leaves, children=(16,), roots=None,
         for start,end in frontier:
             size=end-start
             if size==1:
-                next_level.append((start,end));continue
+                next_level.append((start,end))
+                continue
             offset=start
             # Only the arbitrary modes finish non-power-of-two nodes directly.
             # Strict mode revisits unfinished children with fresh landmarks.
@@ -155,9 +156,12 @@ def tree_frontiers(leaves, children=(16,), roots=None,
             else:
                 budgets = balanced_child_budgets(size, children, depth, final_fanout, root_fanout=root_fanout)
             for count in budgets:
-                next_level.append((offset,offset+count));offset+=count
+                next_level.append((offset,offset+count))
+                offset+=count
             assert offset==end
-        frontier=tuple(next_level);levels.append(frontier);depth+=1
+        frontier=tuple(next_level)
+        levels.append(frontier)
+        depth+=1
     return tuple(levels)
 
 
@@ -220,7 +224,8 @@ def build_reblock_hierarchy(video_tokens, children=(16,), *, grid_shape=None,
             while child_index<len(children_level) and children_level[child_index][0]<end:
                 a,b=children_level[child_index]
                 assert start<=a<b<=end
-                budgets.append(b-a);child_index+=1
+                budgets.append(b-a)
+                child_index+=1
             if end-start>1:
                 previous=by_size.setdefault(end-start,tuple(budgets))
                 assert previous==tuple(budgets)

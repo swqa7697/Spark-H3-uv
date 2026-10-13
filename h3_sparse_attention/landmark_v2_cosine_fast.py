@@ -101,7 +101,8 @@ def fused_cosine_scores(samples,directions,mode='tf32x3',block_m=64):
             and d.shape[1]<=32):
         from .landmark_v2_cosine import unit
         return torch.bmm(unit(samples),d.transpose(1,2))
-    batch,n,_=samples.shape;s=d.shape[1]
+    batch,n,_=samples.shape
+    s=d.shape[1]
     out=torch.empty((batch,n,s),device=samples.device,dtype=torch.float32)
     _score[(triton.cdiv(n,block_m),batch)](samples,d,out,samples,N=n,S=s,BM=block_m,MODE=mode,INDIRECT=False,
                                        FP8=False,num_warps=4)
@@ -311,7 +312,8 @@ def _build_cosine_directions_unbatched(centers,weights,child_capacities, *, retu
     """One launch per binary-tree depth; two raw weighted-mean updates per node."""
     from .landmark_v2_cosine_triton import fused_unit128
     batch,landmarks,dim=centers.shape
-    children=len(child_capacities);internal=children-1
+    children=len(child_capacities)
+    internal=children-1
     assert 16 <= landmarks <= 256 and dim==128 and 2 <= children <= 64
     normalized=fused_unit128(centers)
     if landmarks > 128:

@@ -309,6 +309,88 @@ def test_standalone_zip_has_one_installable_root(tmp_path):
     }.issubset(names)
 
 
+def test_registry_package_is_cross_platform_and_self_contained(tmp_path):
+    builder = _load(
+        "build_comfyui_registry_package", ROOT / "tools/build_comfyui_package.py"
+    )
+    wheels = []
+    for base in ("0.2.36", "0.2.37"):
+        for architecture in ("sm86", "sm89", "sm120"):
+            for platform_tag, wheel_platform in (
+                ("linux-x86_64", "linux_x86_64"),
+                ("windows-x86_64", "win_amd64"),
+            ):
+                wheel = tmp_path / (
+                    f"comfy_kitchen-{base}+spark.h3.{architecture}.cu130.1-"
+                    f"cp312-abi3-{wheel_platform}.whl"
+                )
+                wheel.touch()
+                wheels.append(wheel)
+
+    package = builder.assemble_registry(
+        tmp_path / "output",
+        version="0.1.3",
+        publisher_id="zechengtang",
+        kernel_wheels=tuple(wheels),
+    )
+    metadata = tomllib.loads((package / "pyproject.toml").read_text())
+    assert metadata["project"]["name"] == "comfyui-spark-h3"
+    assert metadata["project"]["version"] == "0.1.3"
+    assert metadata["project"]["requires-python"] == ">=3.12"
+    assert metadata["tool"]["comfy"]["PublisherId"] == "zechengtang"
+    assert len(list((package / "wheelhouse").glob("*.whl"))) == 12
+    identity = json.loads((package / "spark_h3_build.json").read_text())
+    assert identity["distribution"] == "registry"
+    assert identity["architectures"] == ["sm120", "sm86", "sm89"]
+    assert identity["platforms"] == ["linux-x86_64", "windows-x86_64"]
+    assert len(identity["kernel_wheels"]) == 12
+
+    workflows = list((package / "workflows").glob("*.json"))
+    assert len(workflows) == 15
+    workflow_nodes = set()
+    for workflow_path in workflows:
+        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+        workflow_nodes.update(
+            node["type"]
+            for node in workflow["nodes"]
+            if node.get("type", "").startswith("MiniMaxH3SparkAttention")
+        )
+    assert workflow_nodes == {
+        "MiniMaxH3SparkAttentionSM86",
+        "MiniMaxH3SparkAttentionSM89",
+        "MiniMaxH3SparkAttentionSM120",
+    }
+
+    source = (package / "__init__.py").read_text(encoding="utf-8")
+    assert "_HIDDEN_ARCHITECTURE_NODES" not in source
+    archive = builder.make_registry_zip(
+        package, tmp_path / "output", version="0.1.3"
+    )
+    with zipfile.ZipFile(archive) as bundle:
+        names = bundle.namelist()
+    assert "pyproject.toml" in names
+    assert not any(name.startswith("ComfyUI-Spark-H3/") for name in names)
+
+
+def test_registry_package_requires_complete_wheel_matrix(tmp_path):
+    builder = _load(
+        "build_comfyui_registry_package_coverage",
+        ROOT / "tools/build_comfyui_package.py",
+    )
+    wheel = (
+        tmp_path
+        / "comfy_kitchen-0.2.37+spark.h3.sm120.cu130.1-cp312-abi3-linux_x86_64.whl"
+    )
+    wheel.touch()
+    with pytest.raises(ValueError, match="Registry wheel coverage mismatch"):
+        builder.assemble_registry(
+            tmp_path / "output",
+            version="0.1.3",
+            publisher_id="zechengtang",
+            kernel_wheels=(wheel,),
+        )
+
+
 def test_release_package_keeps_cu128_and_cu129_experimental():
     builder = _load(
         "build_comfyui_package_release_cuda", ROOT / "tools/build_comfyui_package.py"
@@ -870,6 +952,30 @@ def test_installer_validates_runtime_and_package_platform(monkeypatch, tmp_path)
         installer._validate_package_identity(
             tmp_path,
             architecture="sm89",
+            cuda_tag="cu130",
+            platform_tag="linux-x86_64",
+        )
+
+    registry_identity = {
+        "distribution": "registry",
+        "architectures": ["sm86", "sm89", "sm120"],
+        "cuda_tag": "cu130",
+        "platforms": ["linux-x86_64", "windows-x86_64"],
+        "kernel_wheels": [],
+    }
+    (tmp_path / "spark_h3_build.json").write_text(
+        json.dumps(registry_identity), encoding="utf-8"
+    )
+    installer._validate_package_identity(
+        tmp_path,
+        architecture="sm86",
+        cuda_tag="cu130",
+        platform_tag="linux-x86_64",
+    )
+    with pytest.raises(RuntimeError, match="does not support sm90"):
+        installer._validate_package_identity(
+            tmp_path,
+            architecture="sm90",
             cuda_tag="cu130",
             platform_tag="linux-x86_64",
         )

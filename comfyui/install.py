@@ -99,22 +99,41 @@ def _validate_package_identity(
         identity = json.loads(identity_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
         raise RuntimeError(f"cannot read package build identity {identity_path}") from error
-    expected = {
-        "architecture": architecture,
-        "cuda_tag": cuda_tag,
-        "platform": platform_tag,
-    }
-    mismatches = {
-        key: (identity.get(key), value)
-        for key, value in expected.items()
-        if identity.get(key) != value
-    }
-    if mismatches:
-        details = ", ".join(
-            f"{key}={found!r} (expected {wanted!r})"
-            for key, (found, wanted) in mismatches.items()
-        )
-        raise RuntimeError(f"Spark-H3 package identity mismatch: {details}")
+    if identity.get("distribution") == "registry":
+        supported = {
+            "architecture": identity.get("architectures", []),
+            "platform": identity.get("platforms", []),
+        }
+        if architecture not in supported["architecture"]:
+            raise RuntimeError(
+                f"Spark-H3 Registry package does not support {architecture}"
+            )
+        if platform_tag not in supported["platform"]:
+            raise RuntimeError(
+                f"Spark-H3 Registry package does not support {platform_tag}"
+            )
+        if identity.get("cuda_tag") != cuda_tag:
+            raise RuntimeError(
+                "Spark-H3 Registry package CUDA identity mismatch: "
+                f"{identity.get('cuda_tag')!r} (expected {cuda_tag!r})"
+            )
+    else:
+        expected = {
+            "architecture": architecture,
+            "cuda_tag": cuda_tag,
+            "platform": platform_tag,
+        }
+        mismatches = {
+            key: (identity.get(key), value)
+            for key, value in expected.items()
+            if identity.get(key) != value
+        }
+        if mismatches:
+            details = ", ".join(
+                f"{key}={found!r} (expected {wanted!r})"
+                for key, (found, wanted) in mismatches.items()
+            )
+            raise RuntimeError(f"Spark-H3 package identity mismatch: {details}")
     listed_wheels = identity.get("kernel_wheels")
     if not isinstance(listed_wheels, list) or not all(
         isinstance(name, str) for name in listed_wheels
