@@ -10,8 +10,13 @@
   <img src="https://img.shields.io/badge/arXiv-Spark--H3-b31b1b?style=flat-square" alt="Spark-H3 on arXiv">
   <a href="https://huggingface.co/Aazeus/Spark-H3"><img src="https://img.shields.io/badge/%F0%9F%A4%97_Hugging_Face-Spark--H3-ffc107?style=flat-square" alt="Spark-H3 on Hugging Face"></a>
   <a href="comfyui/README.md"><img src="https://img.shields.io/badge/ComfyUI-Spark_Node-f97316?style=flat-square" alt="Spark-H3 ComfyUI node"></a>
+  <a href="#special-thanks"><img src="https://img.shields.io/badge/Special_Thanks-Community_Contributors-e11d48?style=flat-square" alt="Special thanks to community contributors"></a>
   <a href="h3_sparse_attention/README.md"><img src="https://img.shields.io/badge/Docs-Usage_%26_Configuration-2563eb?style=flat-square" alt="Usage and configuration guide"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-15803d?style=flat-square" alt="License: Apache 2.0"></a>
+</p>
+
+<p>
+  <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
 <p>
@@ -84,7 +89,8 @@ with install_h3_spark_attn(
 ## 🧩 ComfyUI Installation
 
 Spark-H3 provides standalone nodes for ComfyUI 0.38.x and 0.39.x on Linux and
-Windows x86_64. Release packages support GeForce RTX 40-series GPUs (SM89),
+Windows x86_64. Release packages support GeForce RTX 30-series GPUs (SM86),
+GeForce RTX 40-series GPUs (SM89),
 GeForce RTX 50-series and RTX PRO 5000/6000 Blackwell GPUs (SM120). Choose the
 CUDA 13.0 package matching your operating system and GPU architecture.
 ComfyUI and model weights are not included.
@@ -124,7 +130,7 @@ requirements, defaults, and options. -->
 
 | Status | Item | Resources |
 |---|---|---|
-| ✅ Available | Fused Spark kernels for SM80, SM89, and SM120 | [Kernel documentation](h3_sparse_attention/README.md) · [Performance matrix](docs/kernel_performance_matrix.md) |
+| ✅ Available | Fused Spark kernels for SM80, SM86, SM89, and SM120 | [Kernel documentation](h3_sparse_attention/README.md) · [Performance matrix](docs/kernel_performance_matrix.md) |
 | ✅ Available | Standalone ComfyUI node packaging with wheel-first installation and source fallback | [ComfyUI guide](comfyui/README.md) |
 | ✅ Available | Release Ref2VA inference examples | [Spark-Ref2VA Preview](https://zechengtang.github.io/Spark-H3/#spark-ref2va-preview) |
 | 🚧 In progress | Test and validate the ComfyUI implementation on SM120 GPUs, including GeForce RTX 50 series and RTX PRO 5000/6000 Blackwell | — |
@@ -138,6 +144,14 @@ Thanks to [MiniMax-H3](https://github.com/MiniMax-AI/MiniMax-H3) and
 [Sol-Attn / Sol-Engine](https://github.com/NVlabs/Sana/tree/sol-engine) for the
 model and attention infrastructure. See the [third-party notices](sol_attn/THIRD_PARTY_NOTICES.md)
 for kernel attributions and included licenses.
+
+<a id="special-thanks"></a>
+
+## ❤️ Special Thanks
+
+- Thanks to [Smthem](https://space.bilibili.com/439655233) for support and help during the development of Spark-H3's ComfyUI plugin.
+- Thanks to [AI绘画KK](https://space.bilibili.com/313528845) for relaying the community's requests for Windows support and providing valuable workflow cases for plugin testing.
+- Thanks to [AIwood爱屋研究室](https://space.bilibili.com/503934057) for identifying a bug when Spark-H3 was used in a two-pass sampling workflow and suggesting a switch to Kitchen as the dense backend, which further improved the plugin's speedup ratio.
 
 ## 📄 License
 
