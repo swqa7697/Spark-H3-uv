@@ -12,6 +12,15 @@ version numbers cannot be reused after withdrawal. The next release will use
 `0.2.0` in both GitHub Releases and Comfy Registry so the two version lines are
 aligned again.
 
+The Registry node description is:
+
+> Spark-H3 accelerates ComfyUI's native MiniMax-H3 video generation with
+> adaptive block-sparse attention by grouping similar tokens and correcting
+> tail tokens through reweighting. v0.1.3 Linux benchmarks (LightX2V 768p
+> 8-step, 1344x768, 345 frames, 24 FPS; topk_ratio 20%, warmup_steps 2, dense
+> SDPA): RTX 3090 - Fidelity 2.42x / Speed 4.62x; RTX 4090 - 2.37x / 4.35x;
+> RTX PRO 6000 Blackwell - 2.05x / 3.15x.
+
 ## Build locally
 
 Collect the twelve `comfy_kitchen` wheels from the six architecture-specific
