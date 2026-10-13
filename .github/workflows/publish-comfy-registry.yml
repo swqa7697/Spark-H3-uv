@@ -66,7 +66,7 @@ jobs:
         run: >-
           python tools/build_comfyui_package.py
           --registry
-          --version 0.1.3
+          --version 0.1.5
           --publisher-id zechengtang
           --output-dir dist/registry
           --kernel-wheel-dir "$RUNNER_TEMP/registry-wheels"
@@ -84,7 +84,7 @@ jobs:
           identity = json.loads((package / "spark_h3_build.json").read_text())
 
           assert metadata["project"]["name"] == "comfyui-spark-h3"
-          assert metadata["project"]["version"] == "0.1.3"
+          assert metadata["project"]["version"] == "0.1.5"
           assert metadata["project"]["requires-python"] == ">=3.12"
           assert metadata["tool"]["comfy"]["PublisherId"] == "zechengtang"
           assert identity["distribution"] == "registry"
@@ -107,11 +107,12 @@ jobs:
         working-directory: dist/registry/ComfyUI-Spark-H3
         run: comfy node validate
 
-      - name: Publish version 0.1.3
+      - name: Publish Registry version 0.1.5
         working-directory: dist/registry/ComfyUI-Spark-H3
         env:
           REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
           COMFY_NODE_CHANGELOG: >-
-            Adds SM86 support, KJNodes low-VRAM compatibility, quick mode
-            presets, and selectable dense warmup attention backends.
+            Registry package for Spark-H3 v0.1.3. Adds SM86 support, KJNodes
+            low-VRAM compatibility, quick mode presets, and selectable dense
+            warmup attention backends.
         run: comfy node publish --token "$REGISTRY_ACCESS_TOKEN"
