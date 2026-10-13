@@ -330,7 +330,7 @@
       },
       "widgets_values": [
         "video/Spark_H3_LBH_official_lightx2v_4step_5p2s",
-        "auto",
+        "inherit",
         "auto"
       ],
       "widgets_values_named": {
@@ -2203,10 +2203,10 @@
         }
       },
       "widgets_values": [
-        "# Spark-H3 + official LBH two-pass LightX2V workflow\n\n- This follows the repository h3_lbh path, not h3_selflift.\n- LightX2V LoRA: minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors.\n- Pass 1: 0.2 MP canvas; simple 8-point schedule split after 4 model evaluations.\n- The first sampler's denoised_output is split into video/audio latents. Only video is lifted by MinimaxH3LatentUpscaler3D; audio is passed through unchanged.\n- Target: 0.98 MP (1344x768 for 16:9). Pass 2 re-noises with the same fixed seed and uses video sigmas 0.9035, 0.6316, 0.3158, 0.0 (3 evaluations).\n- Spark patches only the pass-2 high-resolution model: 3 steps, no warmup, topk_ratio=0.1, dense_layers=0, q_reuse_k.\n- Requires LBH-123-AI/Comfyui_Minimax_h3_latent_Upscaler and the v1 FP16 upscaler in ComfyUI/models/latent_upscale_models/.\n- Replace the example input image(s) and prompt before running.\n"
+        "# Spark-H3 + official LBH two-pass LightX2V workflow\n\n- This follows the repository h3_lbh path, not h3_selflift.\n- LightX2V LoRA: minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors.\n- Pass 1: 0.2 MP canvas; simple 8-point schedule split after 4 model evaluations.\n- The first sampler's denoised_output is split into video/audio latents. Only video is lifted by MinimaxH3LatentUpscaler3D; audio is passed through unchanged.\n- Target: 0.98 MP (1344x768 for 16:9). Pass 2 re-noises with the same fixed seed and uses video sigmas 0.9035, 0.6316, 0.3158, 0.0 (3 evaluations).\n- Spark patches only the pass-2 high-resolution model: 3 steps, mode=speed, topk_ratio=0.1, dense_layers=0, q_reuse_k.\n- Requires LBH-123-AI/Comfyui_Minimax_h3_latent_Upscaler and the v1 FP16 upscaler in ComfyUI/models/latent_upscale_models/.\n- Replace the example input image(s) and prompt before running.\n"
       ],
       "widgets_values_named": {
-        "text": "# Spark-H3 + official LBH two-pass LightX2V workflow\n\n- This follows the repository h3_lbh path, not h3_selflift.\n- LightX2V LoRA: minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors.\n- Pass 1: 0.2 MP canvas; simple 8-point schedule split after 4 model evaluations.\n- The first sampler's denoised_output is split into video/audio latents. Only video is lifted by MinimaxH3LatentUpscaler3D; audio is passed through unchanged.\n- Target: 0.98 MP (1344x768 for 16:9). Pass 2 re-noises with the same fixed seed and uses video sigmas 0.9035, 0.6316, 0.3158, 0.0 (3 evaluations).\n- Spark patches only the pass-2 high-resolution model: 3 steps, no warmup, topk_ratio=0.1, dense_layers=0, q_reuse_k.\n- Requires LBH-123-AI/Comfyui_Minimax_h3_latent_Upscaler and the v1 FP16 upscaler in ComfyUI/models/latent_upscale_models/.\n- Replace the example input image(s) and prompt before running.\n"
+        "text": "# Spark-H3 + official LBH two-pass LightX2V workflow\n\n- This follows the repository h3_lbh path, not h3_selflift.\n- LightX2V LoRA: minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors.\n- Pass 1: 0.2 MP canvas; simple 8-point schedule split after 4 model evaluations.\n- The first sampler's denoised_output is split into video/audio latents. Only video is lifted by MinimaxH3LatentUpscaler3D; audio is passed through unchanged.\n- Target: 0.98 MP (1344x768 for 16:9). Pass 2 re-noises with the same fixed seed and uses video sigmas 0.9035, 0.6316, 0.3158, 0.0 (3 evaluations).\n- Spark patches only the pass-2 high-resolution model: 3 steps, mode=speed, topk_ratio=0.1, dense_layers=0, q_reuse_k.\n- Requires LBH-123-AI/Comfyui_Minimax_h3_latent_Upscaler and the v1 FP16 upscaler in ComfyUI/models/latent_upscale_models/.\n- Replace the example input image(s) and prompt before running.\n"
       },
       "color": "#222",
       "bgcolor": "#000"
@@ -2378,10 +2378,10 @@
           "link": 59
         },
         {
-          "name": "enabled",
-          "type": "BOOLEAN",
+          "name": "mode",
+          "type": "COMBO",
           "widget": {
-            "name": "enabled"
+            "name": "mode"
           },
           "link": null
         },
@@ -2396,26 +2396,26 @@
         {
           "name": "warmup_mode",
           "type": "COMBO",
+          "link": null,
           "widget": {
             "name": "warmup_mode"
-          },
-          "link": null
+          }
         },
         {
           "name": "warmup_ratio",
           "type": "FLOAT",
+          "link": null,
           "widget": {
             "name": "warmup_ratio"
-          },
-          "link": null
+          }
         },
         {
           "name": "warmup_steps",
           "type": "INT",
+          "link": null,
           "widget": {
             "name": "warmup_steps"
-          },
-          "link": null
+          }
         },
         {
           "name": "topk_mode",
@@ -2466,6 +2466,14 @@
           "link": null
         },
         {
+          "name": "dense_backend",
+          "type": "COMBO",
+          "widget": {
+            "name": "dense_backend"
+          },
+          "link": null
+        },
+        {
           "name": "tail_granularity",
           "type": "COMBO",
           "shape": 7,
@@ -2500,7 +2508,7 @@
         "ver": "0.1.2"
       },
       "widgets_values": [
-        true,
+        "speed",
         3,
         "warmup_ratio",
         0.0,
@@ -2511,11 +2519,12 @@
         0,
         12288,
         true,
+        "auto",
         "query",
         "q_reuse_k"
       ],
       "widgets_values_named": {
-        "enabled": true,
+        "mode": "speed",
         "steps": 3,
         "warmup_mode": "warmup_ratio",
         "warmup_ratio": 0.0,
@@ -2526,6 +2535,7 @@
         "dense_layers": 0,
         "min_tokens": 12288,
         "strict": true,
+        "dense_backend": "inherit",
         "tail_granularity": "query",
         "reblock_layout": "q_reuse_k"
       }

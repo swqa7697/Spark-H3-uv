@@ -32,6 +32,8 @@ def sol_topk_threshold_backend(
     capability = tuple(torch.cuda.get_device_capability(device))
     if capability == (8, 0):
         return "triton_sm80_topk_threshold"
+    if capability == (8, 6):
+        return "triton_sm86_topk_threshold"
     if capability == (8, 9):
         return "triton_sm89_topk_threshold"
     if capability == (12, 0):
@@ -241,13 +243,17 @@ def sol_topk_threshold_attn(
     backend = sol_topk_threshold_backend(q.device)
     if backend is None:
         raise RuntimeError(
-            "Top-K threshold routing requires an SM80/SM89/SM90/SM100/SM120 backend"
+            "Top-K threshold routing requires an SM80/SM86/SM89/SM90/SM100/SM120 backend"
         )
 
-    if backend in ("triton_sm80_topk_threshold", "triton_sm89_topk_threshold"):
+    if backend in (
+        "triton_sm80_topk_threshold",
+        "triton_sm86_topk_threshold",
+        "triton_sm89_topk_threshold",
+    ):
         if route_mask is not None:
             raise NotImplementedError(
-                "SM80/SM89 hybrid threshold/route-mask execution is not implemented"
+                "SM80/SM86/SM89 hybrid threshold/route-mask execution is not implemented"
             )
         from .sol_vaware_compensation import exact_attention
 

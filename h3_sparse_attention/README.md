@@ -16,13 +16,13 @@ python -m pip install -e '.[cuda]'
 The pipeline still needs the H3-capable diffusers build and model dependencies
 listed in the repository's main README and `requirements.txt`. CUDA execution
 requires a matching PyTorch/CUDA installation. Plain Sol-Attn selects the
-native SM80/SM89 Triton backend or the SM90/SM100/SM120 CuTe backend before launch;
+native SM80/SM86/SM89 Triton backend or the SM90/SM100/SM120 CuTe backend before launch;
 other NVIDIA GPUs with compute capability at least 8.0 use the portable Triton
 backend. Spark-H3's Diffusers integration contains architecture dispatch for
-SM80, SM89, SM90, SM100, and SM120 and raises before reblocking on every other
-architecture. Production kernel support is complete for SM80 and SM120. SM89
-uses the SM80-style CuTe `cp.async` kernel compiled for Ada and has been
-validated on an RTX 4090 with fused Top-K and packed routes. SM90
+SM80, SM86, SM89, SM90, SM100, and SM120 and raises before reblocking on every other
+architecture. Production kernel support is complete for SM80, SM86, and SM120.
+SM86 and SM89 use the SM80-style CuTe `cp.async` kernel; SM86 has been validated
+on an RTX 3090 and SM89 on an RTX 4090 with fused Top-K and packed routes. SM90
 and SM100 remain development targets until compatible GPU resources become
 available for implementation and validation. Spark requires CUDA and Triton
 for its supported execution paths.
@@ -123,7 +123,7 @@ with install_h3_spark_attn(
 ```
 
 The installer is also exported from `h3_sparse_attention.spark`. It uses the
-same reversible processor installation, dense warmup, dense first layer, and
+same reversible processor installation, dense warmup steps, dense first layer, and
 exact context handling as the Sol installer. Call `attention.reset()` before
 another pipeline invocation in the same context. Reset/removal releases the
 cached reblocking plans and query topology.

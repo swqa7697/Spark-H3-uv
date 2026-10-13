@@ -6,7 +6,7 @@ ComfyUI's native MiniMax-H3 model.
 ## Supported configuration
 
 - ComfyUI 0.38.x or 0.39.x with native MiniMax-H3 support
-- NVIDIA SM89 (GeForce RTX 40 series) or SM120 GPU (GeForce RTX 50 series and
+- NVIDIA SM86 (GeForce RTX 30 series), SM89 (GeForce RTX 40 series), or SM120 GPU (GeForce RTX 50 series and
   RTX PRO 5000/6000 Blackwell)
 - PyTorch CUDA 13.0 and CUDA BF16 execution
 - Linux x86_64 or Windows x86_64; the Windows CUDA 13.0 builds have been
@@ -26,8 +26,10 @@ This release provides the following architecture-specific archives:
 
 | GPU | CUDA toolkit | Release archive |
 | --- | --- | --- |
+| SM86 (GeForce RTX 30 series) | 13.0 | `ComfyUI-Spark-H3-<version>-linux-x86_64-sm86-cu130.zip` |
 | SM120 (GeForce RTX 50 series; RTX PRO 5000/6000 Blackwell) | 13.0 | `ComfyUI-Spark-H3-<version>-linux-x86_64-sm120-cu130.zip` |
 | SM89 (GeForce RTX 40 series) | 13.0 | `ComfyUI-Spark-H3-<version>-linux-x86_64-sm89-cu130.zip` |
+| SM86 (GeForce RTX 30 series) | 13.0 | `ComfyUI-Spark-H3-<version>-windows-x86_64-sm86-cu130.zip` |
 | SM120 (GeForce RTX 50 series; RTX PRO 5000/6000 Blackwell) | 13.0 | `ComfyUI-Spark-H3-<version>-windows-x86_64-sm120-cu130.zip` |
 | SM89 (GeForce RTX 40 series) | 13.0 | `ComfyUI-Spark-H3-<version>-windows-x86_64-sm89-cu130.zip` |
 
@@ -41,7 +43,8 @@ present in ComfyUI:
 | ComfyUI 0.38.x | `comfy-kitchen 0.2.36+spark.h3.<architecture>.<CUDA>.1` |
 | ComfyUI 0.39.x | `comfy-kitchen 0.2.37+spark.h3.<architecture>.<CUDA>.1` |
 
-SM89 wheels use the `+spark.h3.sm89.cu130.1` local version and contain code
+SM86 wheels use the `+spark.h3.sm86.cu130.1` local version and compile for
+CUDA architecture `86`. SM89 wheels use the `+spark.h3.sm89.cu130.1` local version and contain code
 compiled for CUDA architecture `89`. SM120 wheels use
 `+spark.h3.sm120.cu130.1` and compile for `120f`. The installer rejects a wheel
 for a different architecture or CUDA toolchain.
@@ -51,6 +54,7 @@ Linux packages accept `linux_x86_64` or compatible manylinux wheel tags;
 Windows packages accept only `win_amd64`. A package built for the other OS is
 rejected before backend installation. The Windows CUDA 13.0 packages have been
 validated independently on SM89 and SM120 hardware.
+The Linux SM86 CUDA 13.0 package has been validated on an RTX 3090.
 
 Do not mix the architecture-specific backend versions or CUDA archives.
 
@@ -131,6 +135,7 @@ python install.py --wheel /path/to/comfy_kitchen-0.2.37+spark.h3.sm120.cu130.1-*
 
 ## Nodes
 
+- **MiniMax H3 Spark Attention (SM86)**
 - **MiniMax H3 Spark Attention (SM89)**
 - **MiniMax H3 Spark Attention (SM120)**
 - **MiniMax H3 Sol Attention (Official Compatibility)**
@@ -182,5 +187,5 @@ python kernel_builder.py --kitchen-base 0.2.37 --output-dir wheelhouse
 The builder pins the selected upstream revision, applies the bundled Spark
 patch, marks a default release wheel as either
 `0.2.36+spark.h3.sm120.cu130.1` or
-`0.2.37+spark.h3.sm120.cu130.1`, and compiles only SM120 by default. One custom-node ZIP
+`0.2.37+spark.h3.sm120.cu130.1`, and compiles only the selected architecture. One custom-node ZIP
 can contain both wheels and the installer chooses the matching one.

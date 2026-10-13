@@ -56,7 +56,7 @@ community LoRAs.
 
 - Up to **2.33× attention speedup** and **1.73× DiT speedup** in a 10-second,
   768p benchmark at 10% attention density. All sparse methods share a 20%
-  dense warmup, with the first Transformer layer kept dense throughout.
+  dense warmup steps, with the first Transformer layer kept dense throughout.
 - **23.30 dB PSNR** at 10% attention density, compared with **20.36 dB** for
   Sol-H3 under the same evaluation protocol.
 - Spark-H3's Diffusers integration implements dedicated backends for NVIDIA
@@ -76,8 +76,8 @@ community LoRAs.
 
 Each video below contains three synchronized outputs from complete ComfyUI
 workflows: **Dense** with Spark-H3 disabled, **Fidelity** with 20% attention
-density and a short dense warmup, and **Speed** with 20% attention density and
-no dense warmup. Fidelity and Speed use `dense_layers=0`.
+density and a few dense warmup steps, and **Speed** with 20% attention density and
+no dense warmup steps. Fidelity and Speed use `dense_layers=0`.
 
 Across all cases, Native MiniMax-H3 uses 20 denoising steps and 4 Fidelity
 warmup steps. The LightX2V variant uses 8 denoising steps and 2 Fidelity
@@ -160,7 +160,7 @@ This case uses an anime action sequence prompt from LBH.
 
 The three samples below use **VDN prompts 01, 06, and 10** from [VDN blog](https://openvdn.github.io/) with the
 [LightX2V MiniMax-H3 Turbo LoRA](https://huggingface.co/lightx2v/Minimax-h3-Turbo)
-and Spark-H3 at 10% attention density, with a 20% dense warmup and the first
+and Spark-H3 at 10% attention density, with 20% of model evaluations used as dense warmup steps and the first
 Transformer layer kept dense throughout.
 
 #### VDN Prompt 01 — Japanese city montage
@@ -246,7 +246,7 @@ See the [technical blog](https://zechengtang.github.io/Spark-H3/) for more resul
 **Evaluation setup.** Dense attention, Sol-H3, Spark-H3, and Spark-H3-Lite are
 evaluated on VBench prompts with 19 denoising steps, 1344×768 resolution, and 240 frames at 24 fps
 (10 seconds). All sparse methods—Sol-H3, Spark-H3, and Spark-H3-Lite—use a 20%
-dense warmup (the first 4 of 19 Transformer evaluations) and keep the first
+dense warmup steps (the first 4 of 19 Transformer evaluations) and keep the first
 Transformer layer dense throughout. Apart from these shared dense settings,
 Sol-H3 follows its official configuration. Quality metrics compare each method
 against dense outputs generated with the same prompts and seeds. Higher PSNR

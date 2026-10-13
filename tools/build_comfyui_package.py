@@ -11,11 +11,15 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "ComfyUI-Spark-H3"
 PACKAGE_BUILD_IDENTITY = "spark_h3_build.json"
-DEFAULT_VERSION = "0.1.2"
+DEFAULT_VERSION = "0.1.3"
 RELEASE_CUDA_TAGS = ("cu130",)
 EXPERIMENTAL_CUDA_TAGS = ("cu128", "cu129")
 KNOWN_CUDA_TAGS = EXPERIMENTAL_CUDA_TAGS + RELEASE_CUDA_TAGS
-RELEASE_TARGETS = {("sm120", "cu130"), ("sm89", "cu130")}
+RELEASE_TARGETS = {
+    ("sm86", "cu130"),
+    ("sm89", "cu130"),
+    ("sm120", "cu130"),
+}
 PACKAGE_PLATFORMS = {
     "linux-x86_64": ("linux_x86_64", "manylinux"),
     "windows-x86_64": ("win_amd64",),
@@ -23,17 +27,28 @@ PACKAGE_PLATFORMS = {
 PACKAGE_CNR_ID = "comfyui-spark-h3"
 PACKAGE_SPARK_NODE = "MiniMaxH3SparkAttentionSM120"
 PACKAGE_SPARK_NODES = {
+    "sm86": "MiniMaxH3SparkAttentionSM86",
     "sm89": "MiniMaxH3SparkAttentionSM89",
     "sm120": PACKAGE_SPARK_NODE,
 }
 PACKAGE_HIDDEN_NODES = {
-    "sm89": (
+    "sm86": (
+        "MiniMaxH3SparkAttentionSM89",
         "MiniMaxH3SparkAttentionSM120",
         "MiniMaxH3SolAttentionSM120",
     ),
-    "sm120": ("MiniMaxH3SparkAttentionSM89",),
+    "sm89": (
+        "MiniMaxH3SparkAttentionSM86",
+        "MiniMaxH3SparkAttentionSM120",
+        "MiniMaxH3SolAttentionSM120",
+    ),
+    "sm120": (
+        "MiniMaxH3SparkAttentionSM86",
+        "MiniMaxH3SparkAttentionSM89",
+    ),
 }
 BACKEND_LOCAL_VERSION_PREFIXES = {
+    "sm86": "spark.h3.sm86",
     "sm89": "spark.h3.sm89",
     "sm120": "spark.h3.sm120",
 }

@@ -451,10 +451,10 @@
           "link": 19
         },
         {
-          "name": "enabled",
-          "type": "BOOLEAN",
+          "name": "mode",
+          "type": "COMBO",
           "widget": {
-            "name": "enabled"
+            "name": "mode"
           },
           "link": null
         },
@@ -469,26 +469,26 @@
         {
           "name": "warmup_mode",
           "type": "COMBO",
+          "link": null,
           "widget": {
             "name": "warmup_mode"
-          },
-          "link": null
+          }
         },
         {
           "name": "warmup_ratio",
           "type": "FLOAT",
+          "link": null,
           "widget": {
             "name": "warmup_ratio"
-          },
-          "link": null
+          }
         },
         {
           "name": "warmup_steps",
           "type": "INT",
+          "link": null,
           "widget": {
             "name": "warmup_steps"
-          },
-          "link": null
+          }
         },
         {
           "name": "topk_mode",
@@ -539,6 +539,14 @@
           "link": null
         },
         {
+          "name": "dense_backend",
+          "type": "COMBO",
+          "widget": {
+            "name": "dense_backend"
+          },
+          "link": null
+        },
+        {
           "name": "tail_granularity",
           "type": "COMBO",
           "shape": 7,
@@ -574,10 +582,10 @@
         "ver": "0.1.2"
       },
       "widgets_values": [
-        true,
+        "fidelity",
         8,
         "warmup_ratio",
-        0.25,
+        0.2,
         2,
         "topk_ratio",
         0.2,
@@ -585,14 +593,15 @@
         0,
         12288,
         true,
+        "inherit",
         "query",
         "q_reuse_k"
       ],
       "widgets_values_named": {
-        "enabled": true,
+        "mode": "fidelity",
         "steps": 8,
         "warmup_mode": "warmup_ratio",
-        "warmup_ratio": 0.25,
+        "warmup_ratio": 0.2,
         "warmup_steps": 2,
         "topk_mode": "topk_ratio",
         "topk_ratio": 0.2,
@@ -600,6 +609,7 @@
         "dense_layers": 0,
         "min_tokens": 12288,
         "strict": true,
+        "dense_backend": "inherit",
         "tail_granularity": "query",
         "reblock_layout": "q_reuse_k"
       }
@@ -1179,10 +1189,10 @@
       "title": "Example guide · 14.4s",
       "properties": {},
       "widgets_values": [
-        "# Spark-H3 + larryvrh 8-step LoRA\n\n- Converted LoRA: `minimax_h3_turbo_v4_step600_ema_comfyui_curve_bf16.safetensors` at strength 1.0.\n- Scheduler: `simple`, 8 steps; Spark `steps=8`, `warmup_ratio=0.25` (first 2 evaluations dense), `topk_ratio=0.2`, `dense_layers=0`.\n- Sampler: stock `euler`.\n- Original three-shot VDN prompt 8; text-to-video with synchronized audio: 345 frames (14.4 s) at 24 fps, 1344×768, seed 42. First/last frame inputs are empty.\n- Load the LoRA before Spark; Spark output feeds both BasicGuider and BasicScheduler.\n- Model files are searched through the local ComfyUI extra model paths.\n- Convert the upstream Larryvrh weight once with `convert_larryvrh_lora_comfyui.py`. The converted file uses the same stock `LoraLoaderModelOnly` path as LightX2V and does not require the Larryvrh custom node.\n"
+        "# Spark-H3 + larryvrh 8-step LoRA\n\n- Converted LoRA: `minimax_h3_turbo_v4_step600_ema_comfyui_curve_bf16.safetensors` at strength 1.0.\n- Scheduler: `simple`, 8 steps; Spark `steps=8`, `mode=fidelity` (first 2 evaluations dense), `topk_ratio=0.2`, `dense_layers=0`.\n- Sampler: stock `euler`.\n- Original three-shot VDN prompt 8; text-to-video with synchronized audio: 345 frames (14.4 s) at 24 fps, 1344×768, seed 42. First/last frame inputs are empty.\n- Load the LoRA before Spark; Spark output feeds both BasicGuider and BasicScheduler.\n- Model files are searched through the local ComfyUI extra model paths.\n- Convert the upstream Larryvrh weight once with `convert_larryvrh_lora_comfyui.py`. The converted file uses the same stock `LoraLoaderModelOnly` path as LightX2V and does not require the Larryvrh custom node.\n"
       ],
       "widgets_values_named": {
-        "text": "# Spark-H3 + larryvrh 8-step LoRA\n\n- Converted LoRA: `minimax_h3_turbo_v4_step600_ema_comfyui_curve_bf16.safetensors` at strength 1.0.\n- Scheduler: `simple`, 8 steps; Spark `steps=8`, `warmup_ratio=0.25` (first 2 evaluations dense), `topk_ratio=0.2`, `dense_layers=0`.\n- Sampler: stock `euler`.\n- Original three-shot VDN prompt 8; text-to-video with synchronized audio: 345 frames (14.4 s) at 24 fps, 1344×768, seed 42. First/last frame inputs are empty.\n- Load the LoRA before Spark; Spark output feeds both BasicGuider and BasicScheduler.\n- Model files are searched through the local ComfyUI extra model paths.\n- Convert the upstream Larryvrh weight once with `convert_larryvrh_lora_comfyui.py`. The converted file uses the same stock `LoraLoaderModelOnly` path as LightX2V and does not require the Larryvrh custom node.\n"
+        "text": "# Spark-H3 + larryvrh 8-step LoRA\n\n- Converted LoRA: `minimax_h3_turbo_v4_step600_ema_comfyui_curve_bf16.safetensors` at strength 1.0.\n- Scheduler: `simple`, 8 steps; Spark `steps=8`, `mode=fidelity` (first 2 evaluations dense), `topk_ratio=0.2`, `dense_layers=0`.\n- Sampler: stock `euler`.\n- Original three-shot VDN prompt 8; text-to-video with synchronized audio: 345 frames (14.4 s) at 24 fps, 1344×768, seed 42. First/last frame inputs are empty.\n- Load the LoRA before Spark; Spark output feeds both BasicGuider and BasicScheduler.\n- Model files are searched through the local ComfyUI extra model paths.\n- Convert the upstream Larryvrh weight once with `convert_larryvrh_lora_comfyui.py`. The converted file uses the same stock `LoraLoaderModelOnly` path as LightX2V and does not require the Larryvrh custom node.\n"
       },
       "color": "#222",
       "bgcolor": "#000"

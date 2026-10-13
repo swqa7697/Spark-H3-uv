@@ -40,6 +40,13 @@ _PRODUCER_CHUNK = int(os.environ.get("H3_SPARK_PRODUCER_CHUNK", "16384"))
 if _PRODUCER_CHUNK <= 0:
     raise ValueError("H3_SPARK_PRODUCER_CHUNK must be positive")
 
+_DENSE_ATTENTION_FUNCTIONS = {
+    "sdpa": "pytorch",
+    "sage": "sage",
+    "kitchen": "comfy_kitchen_int8",
+}
+_SPARK_MODES = ("fidelity", "speed", "custom", "dense")
+
 
 class _Unsupported(RuntimeError):
     pass
@@ -47,6 +54,71 @@ class _Unsupported(RuntimeError):
 
 class _Incompatible(_Unsupported):
     pass
+
+
+def _dense_attention_override(backend: str):
+    """Return a ComfyUI attention override for dense Spark calls.
+
+    ``inherit`` deliberately leaves the existing override chain untouched. The
+    other modes use ComfyUI's public attention registry, so selecting an
+    already installed backend is a Python-only operation and does not require
+    rebuilding the Spark comfy-kitchen extension.
+    """
+
+    if backend == "inherit":
+        return None
+    try:
+        function_name = _DENSE_ATTENTION_FUNCTIONS[backend]
+    except KeyError as error:
+        choices = ", ".join(("inherit", *_DENSE_ATTENTION_FUNCTIONS))
+        raise ValueError(
+            f"dense_backend must be one of {choices}; got {backend!r}"
+        ) from error
+
+    from comfy.ldm.modules import attention as comfy_attention
+
+    function = comfy_attention.get_attention_function(function_name, None)
+    if function is None:
+        dependency = (
+            "the sageattention package"
+            if backend == "sage"
+            else "a comfy-kitchen build with INT8 attention support"
+        )
+        raise RuntimeError(
+            f"dense_backend={backend!r} is unavailable; install {dependency} "
+            "in the Python environment that runs ComfyUI"
+        )
+
+    def override(_previous, *args, **kwargs):
+        return function(*args, **kwargs)
+
+    # MiniMax-H3 passes single-owner AttentionTensorContainer objects.  Preserve
+    # comfy-kitchen's zero-copy consumer when that backend exposes one.
+    container_function = getattr(function, "container_function", None)
+    if container_function is not None:
+        override.container_function = container_function
+    override.dense_backend = backend
+    return override
+
+
+def _dense_block_args(args, attention_override):
+    """Copy block inputs and apply a backend only to this dense invocation."""
+
+    if attention_override is None:
+        return args
+    transformer_options = dict(args.get("transformer_options") or {})
+    transformer_options["optimized_attention_override"] = attention_override
+    return {**args, "transformer_options": transformer_options}
+
+
+def _spark_mode_is_dense(mode: str) -> bool:
+    """Validate the UI profile and report whether it bypasses Spark."""
+
+    if mode not in _SPARK_MODES:
+        raise ValueError(
+            f"mode must be one of {', '.join(_SPARK_MODES)}; got {mode!r}"
+        )
+    return mode == "dense"
 
 
 def _enable_cu128_cuda_backend(target_capability: tuple[int, int]) -> bool:
@@ -300,7 +372,7 @@ def _native_spark_eligible(attn, x, rope_freqs, transformer_options, layer, poli
         return "attention input is not a rank-2 tensor", True
     if state.is_warmup:
         return (
-            f"dense warmup evaluation {state.controller.evaluation_index + 1}/"
+            f"dense warmup step {state.controller.evaluation_index + 1}/"
             f"{state.warmup_evaluations}",
             False,
         )
@@ -540,7 +612,154 @@ def _native_spark_attention(attn, x, rope_freqs, transformer_options, layer, sta
     return output
 
 
-def _make_native_spark_block_patch(block, layer, policy, state, activation_log, strict):
+def _kj_low_vram_forward(model):
+    """Return KJNodes' opt-in compose hook, or ``None`` for the stock path.
+
+    This is intentionally resolved once while the Spark node is installed.
+    Models without the KJNodes patch continue to use
+    ``_make_native_spark_block_patch`` without a per-block compatibility
+    branch.  Consequently MiniMax H3 Low VRAM Attention must be connected
+    before Spark Attention in the MODEL chain.
+    """
+
+    model_options = getattr(model, "model_options", None)
+    if not isinstance(model_options, dict):
+        return None
+    transformer_options = model_options.get("transformer_options")
+    if not isinstance(transformer_options, dict):
+        return None
+    forward = transformer_options.get("sol_take_forward")
+    if forward is None:
+        return None
+    if not callable(forward) or not getattr(forward, "_uses_optimized_attention", False):
+        raise RuntimeError(
+            "MiniMax H3 Low VRAM Attention exposed an incompatible "
+            "sol_take_forward hook; update ComfyUI-KJNodes"
+        )
+    return forward
+
+
+def _make_kj_low_vram_attention_override(
+    layer, state, activation_log, transformer_options
+):
+    """Route KJNodes' BHSD head groups through the existing Spark wheel."""
+
+    def override(_previous, q, k, v, heads, mask=None, skip_reshape=False,
+                 skip_output_reshape=False, **kwargs):
+        if mask is not None or not skip_reshape:
+            raise _Incompatible(
+                "MiniMax H3 Low VRAM Attention must call unmasked BHSD attention"
+            )
+        if not all(torch.is_tensor(tensor) and tensor.ndim == 4
+                   for tensor in (q, k, v)):
+            raise _Incompatible(
+                "MiniMax H3 Low VRAM Attention supplied invalid Q/K/V tensors"
+            )
+        batch, chunk_heads, tokens, head_dim = q.shape
+        if (
+            k.shape != q.shape
+            or v.shape != q.shape
+            or int(heads) != chunk_heads
+            or head_dim != 128
+        ):
+            raise _Incompatible(
+                "MiniMax H3 Low VRAM Attention supplied incompatible Q/K/V shapes"
+            )
+        layout = state.spark_layout(
+            transformer_options["minimax_h3_layout"], tokens, q.device
+        )
+        # KJNodes produces BHSD in ComfyUI's native packed order. Spark takes
+        # contiguous BTHD with the target-video segment first. index_select
+        # both converts the layout and materializes the strided QKV views.
+        q_bthd, k_bthd, v_bthd = (
+            tensor.transpose(1, 2).index_select(1, layout.permutation).contiguous()
+            for tensor in (q, k, v)
+        )
+        output = comfy_kitchen_spark_attention(
+            state.controller, q_bthd, k_bthd, v_bthd, layout, layer
+        )
+        if not state.controller.output_in_original_layout:
+            output = output.index_select(1, layout.inverse_permutation)
+        state.controller.counts["sparse:spark_comfy_kj_low_vram"] += 1
+        activation_log.hit(
+            tokens,
+            layout.video_tokens,
+            tuple(torch.cuda.get_device_capability(q.device)),
+        )
+        if skip_output_reshape:
+            return output.transpose(1, 2)
+        return output.reshape(batch, tokens, chunk_heads * head_dim)
+
+    override.spark_kj_low_vram = True
+    return override
+
+
+def _make_kj_low_vram_spark_block_patch(
+    block, layer, policy, state, activation_log, strict, dense_attention_override
+):
+    """Compose Spark with KJNodes without changing the stock Spark patch."""
+
+    def block_patch(args, extra):
+        reason, warn = _native_spark_eligible(
+            block.attn,
+            args["img"],
+            args["rope_freqs"],
+            args["transformer_options"],
+            layer,
+            policy,
+            state,
+            strict,
+        )
+        if reason is not None:
+            policy.log_once(("dense", args["img"].shape[0], reason),
+                            f"dense ({args['img'].shape[0]} tokens): {reason}")
+            if warn:
+                activation_log.miss(reason)
+            return extra["original_block"](
+                _dense_block_args(args, dense_attention_override)
+            )
+        try:
+            transformer_options = dict(args.get("transformer_options") or {})
+            transformer_options["optimized_attention_override"] = (
+                _make_kj_low_vram_attention_override(
+                    layer, state, activation_log, transformer_options
+                )
+            )
+            # Do not supply the block-level ``attention`` callback here.
+            # KJNodes then owns Attention.forward, can consume its one-element
+            # input list early, splits heads, and performs out_proj only once.
+            result = extra["original_block"]({
+                **args,
+                "transformer_options": transformer_options,
+            })
+            if layer == 49:
+                log.info(
+                    "[Spark-H3] execution summary: evaluations=%d "
+                    "warmup_evaluations=%d counts=%s unexpected_fallbacks=%s",
+                    state.controller.evaluation_index + 1,
+                    state.warmup_evaluations,
+                    dict(state.controller.counts),
+                    sorted(activation_log.fallbacks),
+                )
+            return result
+        except Exception as exc:
+            if strict:
+                raise
+            reason = f"{type(exc).__name__}: {exc}"
+            policy.log_once(("kernel_fallback", reason),
+                            f"dense after Spark failure: {reason}")
+            activation_log.miss(reason)
+            return extra["original_block"](
+                _dense_block_args(args, dense_attention_override)
+            )
+
+    block_patch.spark_kj_low_vram = True
+    return block_patch
+
+
+def _make_native_spark_block_patch(
+    block, layer, policy, state, activation_log, strict, dense_attention_override
+):
     def attention(h, rope_freqs=None, transformer_options={}):
         return _native_spark_attention(
             block.attn, h, rope_freqs, transformer_options, layer, state, activation_log
@@ -562,16 +781,34 @@ def _make_native_spark_block_patch(block, layer, policy, state, activation_log, 
                             f"dense ({args['img'].shape[0]} tokens): {reason}")
             if warn:
                 activation_log.miss(reason)
-            return extra["original_block"](args)
+            return extra["original_block"](
+                _dense_block_args(args, dense_attention_override)
+            )
         try:
-            return extra["original_block"]({**args, "attention": attention})
+            result = extra["original_block"]({**args, "attention": attention})
+            # Emit the counters at the end of every sparse model evaluation.
+            # ComfyUI keeps patched models cached, so ON_CLEANUP may happen long
+            # after a prompt has finished and cannot be used as a prompt-level
+            # validation boundary.
+            if layer == 49:
+                log.info(
+                    "[Spark-H3] execution summary: evaluations=%d "
+                    "warmup_evaluations=%d counts=%s unexpected_fallbacks=%s",
+                    state.controller.evaluation_index + 1,
+                    state.warmup_evaluations,
+                    dict(state.controller.counts),
+                    sorted(activation_log.fallbacks),
+                )
+            return result
         except Exception as exc:
             if strict:
                 raise
             reason = f"{type(exc).__name__}: {exc}"
             policy.log_once(("kernel_fallback", reason), f"dense after Spark failure: {reason}")
             activation_log.miss(reason)
-            return extra["original_block"](args)
+            return extra["original_block"](
+                _dense_block_args(args, dense_attention_override)
+            )
 
     return block_patch
 
@@ -585,8 +822,12 @@ class MiniMaxH3SparkAttentionSM120:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "model": ("MODEL", {"tooltip": "接入 MiniMax H3 模型：连接在模型加载节点之后、采样器之前。"}),
-                "enabled": ("BOOLEAN", {"default": True, "tooltip": "是否启用 Spark；关闭时原样输出输入模型。"}),
+                "model": ("MODEL", {"tooltip": "接入 MiniMax H3 模型：连接在模型加载节点之后、采样器之前。若使用 KJNodes Low VRAM Attention / Chunk FeedForward，请把它们连接在 Spark 之前。"}),
+                "mode": (
+                    list(_SPARK_MODES),
+                    {"default": "fidelity",
+                     "tooltip": "fidelity（默认）填入 20% dense 预热；speed 填入 0%；手动调整有效 warmup 参数后显示 custom；dense 完全旁路 Spark。双采工作流的高分辨率二阶段建议使用 speed。"},
+                ),
                 "steps": (
                     "INT",
                     {"default": 20, "min": 1, "max": 200, "step": 1,
@@ -594,16 +835,16 @@ class MiniMaxH3SparkAttentionSM120:
                 ),
                 "warmup_mode": (["warmup_ratio", "warmup_steps"],
                                 {"default": "warmup_ratio",
-                                 "tooltip": "选择 dense 预热长度的表示法：0–1 比例或固定模型调用次数；只会使用对应的 warmup 参数。"}),
+                                 "tooltip": "Dense 预热长度的表示法。mode 只会快捷填入这里和对应数值；之后仍可手动修改。"}),
                 "warmup_ratio": (
                     "FLOAT",
                     {"default": 0.2, "min": 0.0, "max": 1.0, "step": 0.01,
-                     "tooltip": "开始时保持 dense 的采样调用比例。0.2 表示 20%；仅在 warmup_mode=warmup_ratio 时生效。"},
+                     "tooltip": "开始时保持 dense 的采样调用比例。speed 预设填入 0，fidelity 预设填入 0.2；仅在 warmup_mode=warmup_ratio 时生效。"},
                 ),
                 "warmup_steps": (
                     "INT",
                     {"default": 4, "min": 0, "max": 200, "step": 1,
-                     "tooltip": "开始时保持 dense 的模型调用次数；仅在 warmup_mode=warmup_steps 时生效。20 步采样设 4 相当于 20%。"},
+                     "tooltip": "开始时保持 dense 的模型调用次数；仅在 warmup_mode=warmup_steps 时生效。mode 预设不会删除这个高级设置。"},
                 ),
                 "topk_mode": (["topk_ratio", "topk_blocks"],
                               {"default": "topk_ratio",
@@ -632,6 +873,11 @@ class MiniMaxH3SparkAttentionSM120:
                                        "tooltip": "启用时，Spark 不兼容的输入会报错；关闭时对不兼容输入回退原始 attention，并在日志记录原因。"}),
             },
             "optional": {
+                "dense_backend": (
+                    ["inherit", "kitchen", "sage", "sdpa"],
+                    {"default": "inherit",
+                     "tooltip": "Dense 预热、固定 dense 层和 dense 回退所用的 attention 后端。inherit 不强制覆盖，沿用模型或 ComfyUI 当前设置；kitchen、sage、sdpa 强制使用对应后端。"},
+                ),
                 "tail_granularity": (["query", "block"],
                                      {"default": "query",
                                       "tooltip": "近似分支的 Q 粒度：query（默认）对应 sol-engine Sol，只下采样 K/V、保留逐条真实 Q；block 对应 ComfyUI Sol，Q 和 K/V 都按块下采样，同一 Q 块共享近似结果。精确分支仍使用真实 Q。"}),
@@ -650,15 +896,18 @@ class MiniMaxH3SparkAttentionSM120:
         "5000/6000 Blackwell). Uses ComfyUI's official H3 "
         "block-replacement, sigma scheduling, cleanup, and chunked QKV producer "
         "architecture. Connect it after UNETLoader and set steps to the "
-        "sampler's model-evaluation count."
+        "sampler's model-evaluation count. KJNodes Low VRAM Attention and "
+        "Chunk FeedForward must precede this node in the MODEL chain."
     )
 
     def patch(
         self,
         model,
-        enabled,
+        mode,
         steps,
+        warmup_mode,
         warmup_ratio,
+        warmup_steps,
         topk_ratio,
         dense_layers,
         min_tokens,
@@ -668,13 +917,12 @@ class MiniMaxH3SparkAttentionSM120:
         tail_granularity="query",
         topk_mode="topk_ratio",
         topk_blocks=228,
-        warmup_mode="warmup_ratio",
-        warmup_steps=4,
         global_anchor_dtype="float32",
         midpoint_direction_mode="legacy",
         reblock_layout="q_reuse_k",
+        dense_backend="inherit",
     ):
-        if not enabled:
+        if _spark_mode_is_dense(str(mode)):
             return (model,)
         diffusion_model = model.get_model_object("diffusion_model")
         blocks = getattr(diffusion_model, "blocks", None)
@@ -686,6 +934,7 @@ class MiniMaxH3SparkAttentionSM120:
         import comfy.patcher_extension
         from comfy_extras.nodes_sparse_attention import SparseAttnPatch
 
+        kj_low_vram_forward = _kj_low_vram_forward(model)
         patched = model.clone()
         state = _RunState.create(
             int(steps), float(warmup_ratio), float(topk_ratio),
@@ -701,6 +950,12 @@ class MiniMaxH3SparkAttentionSM120:
             reblock_layout=str(reblock_layout),
             target_capability=self.TARGET_CAPABILITY,
         )
+        if kj_low_vram_forward is not None:
+            # Head groups need independent content-derived permutations. The
+            # experimental two-layer reuse mode has only one cache slot and
+            # cannot distinguish multiple groups calling the same layer.
+            # This controller belongs only to the cloned, opt-in MODEL branch.
+            state.controller.reblock_reuse_layers = 1
         model_sampling = model.get_model_object("model_sampling")
         policy = SparseAttnPatch(
             tau=1.0,
@@ -717,11 +972,18 @@ class MiniMaxH3SparkAttentionSM120:
             extra_tokens=0,
             verbose=True,
         )
+        dense_attention_override = _dense_attention_override(str(dense_backend))
         activation_log = _ActivationLog()
+        block_patch_factory = (
+            _make_kj_low_vram_spark_block_patch
+            if kj_low_vram_forward is not None
+            else _make_native_spark_block_patch
+        )
         for layer, block in enumerate(blocks):
             patched.set_model_patch_replace(
-                _make_native_spark_block_patch(
-                    block, layer, policy, state, activation_log, bool(strict)
+                block_patch_factory(
+                    block, layer, policy, state, activation_log, bool(strict),
+                    dense_attention_override,
                 ),
                 "dit",
                 "double_block",
@@ -745,8 +1007,9 @@ class MiniMaxH3SparkAttentionSM120:
         )
         log.info(
             "[Spark-H3] installed ComfyUI-native producer on %d H3 blocks "
-            "(mode %s, tail %s, anchor %s, approximation %s, midpoint %s, reblock %s, Top-K %s, warmup %s, dense blocks %s)",
+            "(profile %s, mode %s, tail %s, anchor %s, approximation %s, midpoint %s, reblock %s, Top-K %s, warmup %s, dense backend %s, dense blocks %s, KJ low-VRAM %s)",
             len(blocks),
+            str(mode),
             str(ablation_mode),
             str(video_tail_mode),
             state.controller.config.global_anchor_dtype,
@@ -757,7 +1020,9 @@ class MiniMaxH3SparkAttentionSM120:
              else f"{100.0 * float(topk_ratio):.0f}%"),
             (f"{state.warmup_evaluations} steps" if warmup_mode == "warmup_steps"
              else f"{100.0 * float(warmup_ratio):.0f}%"),
+            str(dense_backend),
             "none" if int(dense_layers) == 0 else f"0..{int(dense_layers) - 1}",
+            "active" if kj_low_vram_forward is not None else "off",
         )
         return (patched,)
 
@@ -772,8 +1037,7 @@ class MiniMaxH3SolAttentionSM120(MiniMaxH3SparkAttentionSM120):
         required.pop("topk_mode")
         required.pop("topk_ratio")
         required.pop("topk_blocks")
-        required.pop("warmup_mode")
-        required.pop("warmup_steps")
+        inputs["optional"].pop("dense_backend")
         inputs["optional"].pop("tail_granularity")
         inputs["optional"].pop("reblock_layout")
         required["tau"] = (
@@ -791,15 +1055,17 @@ class MiniMaxH3SolAttentionSM120(MiniMaxH3SparkAttentionSM120):
     def patch(
         self,
         model,
-        enabled,
+        mode,
         steps,
+        warmup_mode,
         warmup_ratio,
+        warmup_steps,
         dense_layers,
         min_tokens,
         strict,
         tau,
     ):
-        if not enabled:
+        if _spark_mode_is_dense(str(mode)):
             return (model,)
         diffusion_model = model.get_model_object("diffusion_model")
         blocks = getattr(diffusion_model, "blocks", None)
@@ -810,13 +1076,24 @@ class MiniMaxH3SolAttentionSM120(MiniMaxH3SparkAttentionSM120):
 
         # All actual patching and attention execution belongs to ComfyUI's
         # official node. Spark and BSA now share the same 0..1 progress scale.
-        del steps, strict
+        steps = int(steps)
+        if str(warmup_mode) == "warmup_steps":
+            if int(warmup_steps) < 0:
+                raise ValueError("warmup_steps must be a nonnegative integer")
+            effective_warmup_ratio = min(steps, int(warmup_steps)) / steps
+        elif str(warmup_mode) == "warmup_ratio":
+            effective_warmup_ratio = float(warmup_ratio)
+            if not 0.0 <= effective_warmup_ratio <= 1.0:
+                raise ValueError("warmup_ratio must lie in [0, 1]")
+        else:
+            raise ValueError("warmup_mode must be 'warmup_ratio' or 'warmup_steps'")
+        del strict
         patched = apply_block_sparse_attention(
             model,
             tau=float(tau),
             topk_ratio=0.0,
             vsa=False,
-            start_percent=float(warmup_ratio),
+            start_percent=effective_warmup_ratio,
             end_percent=1.0,
             min_tokens=int(min_tokens),
             dense_blocks=set(range(int(dense_layers))),
@@ -829,7 +1106,7 @@ class MiniMaxH3SolAttentionSM120(MiniMaxH3SparkAttentionSM120):
             "(tau %.2f, warmup %.0f%%, dense layers %d)",
             len(blocks),
             float(tau),
-            100.0 * float(warmup_ratio),
+            100.0 * effective_warmup_ratio,
             int(dense_layers),
         )
         return (patched,)
@@ -844,6 +1121,19 @@ class MiniMaxH3SparkAttentionSM89(MiniMaxH3SparkAttentionSM120):
         "Patch ComfyUI's native MiniMax H3 DiT with the comfy-kitchen "
         "Spark-H3 CUDA kernel compiled for GeForce RTX 40-series GPUs "
         "(SM89). Connect it after "
+        "UNETLoader and set steps to the sampler's model-evaluation count."
+    )
+
+
+class MiniMaxH3SparkAttentionSM86(MiniMaxH3SparkAttentionSM120):
+    """Run the native comfy-kitchen Spark kernel compiled for Ampere SM86."""
+
+    TARGET_CAPABILITY = (8, 6)
+
+    DESCRIPTION = (
+        "Patch ComfyUI's native MiniMax H3 DiT with the comfy-kitchen "
+        "Spark-H3 CUDA kernel compiled for GeForce RTX 30-series GPUs "
+        "(SM86). Connect it after "
         "UNETLoader and set steps to the sampler's model-evaluation count."
     )
 
@@ -1052,6 +1342,7 @@ class SaveVideoLosslessUltrafast:
 NODE_CLASS_MAPPINGS = {
     "MiniMaxH3SparkAttentionSM120": MiniMaxH3SparkAttentionSM120,
     "MiniMaxH3SparkAttentionSM89": MiniMaxH3SparkAttentionSM89,
+    "MiniMaxH3SparkAttentionSM86": MiniMaxH3SparkAttentionSM86,
     "MiniMaxH3SolAttentionSM120": MiniMaxH3SolAttentionSM120,
     "MiniMaxH3BSAAllExactScheduled": MiniMaxH3BSAAllExactScheduled,
     "SaveMiniMaxH3AVLatentCache": SaveMiniMaxH3AVLatentCache,
@@ -1062,6 +1353,7 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3SparkAttentionSM120": "MiniMax H3 Spark Attention (SM120)",
     "MiniMaxH3SparkAttentionSM89": "MiniMax H3 Spark Attention (SM89)",
+    "MiniMaxH3SparkAttentionSM86": "MiniMax H3 Spark Attention (SM86)",
     "MiniMaxH3SolAttentionSM120": "MiniMax H3 Sol Attention (Official Compatibility)",
     "MiniMaxH3BSAAllExactScheduled": "MiniMax H3 BSA All-Exact (Scheduled Dense Control)",
     "SaveMiniMaxH3AVLatentCache": "Save MiniMax H3 AV Latent Cache",
@@ -1084,3 +1376,28 @@ except ImportError:  # Direct module import in tests / development checkouts.
 
 NODE_CLASS_MAPPINGS.update(DMAD_NODE_CLASS_MAPPINGS)
 NODE_DISPLAY_NAME_MAPPINGS.update(DMAD_NODE_DISPLAY_NAME_MAPPINGS)
+
+# Expose the compact Ref2VA conditioner from the repository checkout as part of
+# the same ComfyUI custom-node entry point.
+try:
+    if __package__:
+        from .comfyui_ref2va import (
+            NODE_CLASS_MAPPINGS as REF2VA_NODE_CLASS_MAPPINGS,
+            NODE_DISPLAY_NAME_MAPPINGS as REF2VA_NODE_DISPLAY_NAME_MAPPINGS,
+        )
+    else:  # Direct module import in tests / development checkouts.
+        from comfyui_ref2va import (
+            NODE_CLASS_MAPPINGS as REF2VA_NODE_CLASS_MAPPINGS,
+            NODE_DISPLAY_NAME_MAPPINGS as REF2VA_NODE_DISPLAY_NAME_MAPPINGS,
+        )
+except ModuleNotFoundError as error:
+    optional_names = {"comfyui_ref2va"}
+    if __package__:
+        optional_names.add(f"{__package__}.comfyui_ref2va")
+    if error.name not in optional_names:
+        raise
+    REF2VA_NODE_CLASS_MAPPINGS = {}
+    REF2VA_NODE_DISPLAY_NAME_MAPPINGS = {}
+
+NODE_CLASS_MAPPINGS.update(REF2VA_NODE_CLASS_MAPPINGS)
+NODE_DISPLAY_NAME_MAPPINGS.update(REF2VA_NODE_DISPLAY_NAME_MAPPINGS)

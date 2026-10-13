@@ -4,7 +4,7 @@
 
 - ComfyUI 0.38.x 或 0.39.x，且已包含原生 MiniMax-H3 支持。
 - Linux 或 Windows x86_64、Python 3.12+、PyTorch CUDA 13.0，以及 CUDA BF16。
-- NVIDIA SM89（GeForce RTX 40 系）或 SM120 GPU（GeForce RTX 50 系及
+- NVIDIA SM86（GeForce RTX 30 系）、SM89（GeForce RTX 40 系）或 SM120 GPU（GeForce RTX 50 系及
   RTX PRO 5000/6000 Blackwell）。
 
 **适配版本：ComfyUI 0.38.x 和 0.39.x。** 安装器根据 ComfyUI 环境中的
@@ -15,12 +15,14 @@
 
 ## 选择版本
 
-本次发布提供四个按操作系统和 GPU 架构区分的 CUDA 13.0 安装包：
+本次发布提供按操作系统和 GPU 架构区分的 CUDA 13.0 安装包：
 
 | GPU | CUDA 工具链 | 安装包 |
 | --- | --- | --- |
+| SM86（GeForce RTX 30 系） | 13.0 | `ComfyUI-Spark-H3-<version>-linux-x86_64-sm86-cu130.zip` |
 | SM120（GeForce RTX 50 系；RTX PRO 5000/6000 Blackwell） | 13.0 | `ComfyUI-Spark-H3-<version>-linux-x86_64-sm120-cu130.zip` |
 | SM89（GeForce RTX 40 系） | 13.0 | `ComfyUI-Spark-H3-<version>-linux-x86_64-sm89-cu130.zip` |
+| SM86（GeForce RTX 30 系） | 13.0 | `ComfyUI-Spark-H3-<version>-windows-x86_64-sm86-cu130.zip` |
 | SM120（GeForce RTX 50 系；RTX PRO 5000/6000 Blackwell） | 13.0 | `ComfyUI-Spark-H3-<version>-windows-x86_64-sm120-cu130.zip` |
 | SM89（GeForce RTX 40 系） | 13.0 | `ComfyUI-Spark-H3-<version>-windows-x86_64-sm89-cu130.zip` |
 
@@ -36,24 +38,26 @@
 | ComfyUI 0.38.x | `comfy-kitchen 0.2.36+spark.h3.<架构>.<CUDA>.1` |
 | ComfyUI 0.39.x | `comfy-kitchen 0.2.37+spark.h3.<架构>.<CUDA>.1` |
 
-正式 wheel 使用完整的架构和 CUDA 身份：SM89 为
+正式 wheel 使用完整的架构和 CUDA 身份：SM86 为
+`+spark.h3.sm86.cu130.1`，SM89 为
 `+spark.h3.sm89.cu130.1`，SM120 为 `+spark.h3.sm120.cu130.1`。找不到匹配
-wheel 时，固定版本的 comfy-kitchen 源码编译在 SM89 使用 `89`，在 SM120
+wheel 时，固定版本的 comfy-kitchen 源码编译在 SM86 使用 `86`，在 SM89 使用 `89`，在 SM120
 CU130 使用 `120f`。
 
 ZIP 文件名和包内 `spark_h3_build.json` 同时记录目标平台。Linux 包只接受
 `linux_x86_64` 或兼容的 manylinux wheel，Windows 包只接受 `win_amd64`
 wheel；安装器也会在安装 backend 前检查当前操作系统。Windows CUDA 13.0
 安装包已经分别在 SM89 与 SM120 目标硬件上完成验证，且不能与 Linux ZIP 混用。
+Linux SM86 CUDA 13.0 安装包已在 RTX 3090 上完成验证。
 
-两种架构的后端版本不能混用。正常情况下不需要手动选择，直接运行
+不同架构的后端版本不能混用。正常情况下不需要手动选择，直接运行
 `install.py` 即可。
 
 本次发布仅提供 CUDA 13.0 预编译 wheel：
 
 | 本机 CUDA | 安装方式 |
 | --- | --- |
-| CUDA 13.0 | 按 GPU 架构使用 SM120 或 SM89 发布包内的预编译 wheel |
+| CUDA 13.0 | 按 GPU 架构使用 SM120、SM89 或 SM86 发布包内的预编译 wheel |
 | 其他版本 | 不属于当前发布支持范围 |
 
 这里的 CUDA 版本指编译 `comfy-kitchen` 扩展时使用的 CUDA 工具链。
@@ -71,7 +75,7 @@ unzip /path/to/ComfyUI-Spark-H3-<version>-linux-x86_64-sm120-cu130.zip  # SM120 
 /path/to/ComfyUI/.venv/bin/python ComfyUI-Spark-H3/install.py
 ```
 
-SM120 CUDA 13.0 和 SM89 CUDA 13.0 使用对应 ZIP 后直接运行安装器。
+SM120、SM89 和 SM86 CUDA 13.0 使用对应 ZIP 后直接运行安装器。
 `--source` 只用于在受支持的 CUDA 13.0 环境中重建 backend，例如当前
 Python wheel tag 没有预编译产物时：
 
@@ -98,9 +102,10 @@ CU128 暂不作为正式安装包发布。开发者可以显式提供本地 CU12
 ```
 
 源码路径使用 CUDA 12.8 支持的 `120a` 架构目标。该通道仅用于本地适配和
-正确性验证，不属于 0.1.2 正式发布范围。
+正确性验证，不属于 0.1.3 正式发布范围。
 
-安装完成后重启 ComfyUI。GeForce RTX 40 系选择
+安装完成后重启 ComfyUI。GeForce RTX 30 系选择
+**MiniMax H3 Spark Attention (SM86)**；GeForce RTX 40 系选择
 **MiniMax H3 Spark Attention (SM89)**；GeForce RTX 50 系及 RTX PRO
 5000/6000 Blackwell 选择 **MiniMax H3 Spark Attention (SM120)**。
 
@@ -108,7 +113,7 @@ CU128 暂不作为正式安装包发布。开发者可以显式提供本地 CU12
 `BasicGuider` 之间：
 
 ```text
-UNETLoader -> MiniMax H3 Spark Attention (SM89 或 SM120) -> BasicGuider
+UNETLoader -> MiniMax H3 Spark Attention (SM86、SM89 或 SM120) -> BasicGuider
 ```
 
 ## 手动指定 comfy-kitchen 基础版本
@@ -147,7 +152,7 @@ Python 启动。可以在 ComfyUI 环境中检查当前版本：
 
 ### 找不到匹配的 wheel
 
-安装器会先检查 ZIP 内的 wheel，再查找匹配的 Release wheel。SM120 与 SM89
+安装器会先检查 ZIP 内的 wheel，再查找匹配的 Release wheel。SM120、SM89 与 SM86
 正式安装均使用 CUDA 13.0 ZIP。源码编译需要：
 
 - Git、CMake 和 Ninja。

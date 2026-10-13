@@ -16,7 +16,7 @@ from h3_sparse_attention.processor import _Controller
         ("packed_external_no_route_qk", 0.0, True, True),
     ],
 )
-@pytest.mark.parametrize("capability", [(8, 0), (8, 9), (12, 0)])
+@pytest.mark.parametrize("capability", [(8, 0), (8, 6), (8, 9), (12, 0)])
 def test_sm120_route_execution_reaches_fused_kernel_contract(
     monkeypatch, execution, expected_ratio, expected_skip, expects_route, capability
 ):

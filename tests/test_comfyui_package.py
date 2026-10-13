@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
 import subprocess
 import sys
 from types import ModuleType
@@ -32,6 +33,15 @@ def test_standalone_package_is_small_complete_and_importable(tmp_path):
     )
     assert (package / "__init__.py").is_file()
     assert (package / "comfyui_backend.py").is_file()
+    mode_widgets = package / "web/spark_mode_widgets.js"
+    assert mode_widgets.is_file()
+    mode_widget_source = mode_widgets.read_text(encoding="utf-8")
+    assert 'speed: { warmup_mode: "warmup_ratio", warmup_ratio: 0.0 }' in mode_widget_source
+    assert 'fidelity: { warmup_mode: "warmup_ratio", warmup_ratio: 0.2 }' in mode_widget_source
+    assert 'mode.value = "custom"' in mode_widget_source
+    assert '"双采工作流的高分辨率二阶段：关闭 dense warmup → 切换到 speed"' in mode_widget_source
+    assert '"warmup 阶段现可使用 Kitchen INT8 加速 → 切换到 kitchen"' in mode_widget_source
+    assert "{ serialize: false }" in mode_widget_source
     assert not (package / "comfyui_ref2va.py").exists()
     assert (package / "h3_sparse_attention/landmark_tree_v2.py").is_file()
     assert not (package / "h3_sparse_attention/spark_reweight_sm89.py").exists()
@@ -78,7 +88,35 @@ def test_standalone_package_is_small_complete_and_importable(tmp_path):
         assert spark["properties"]["ver"] == "0.1.7"
         assert spark["widgets_values_named"]["reblock_layout"] == "q_reuse_k"
         assert spark["widgets_values_named"]["topk_mode"] == "topk_ratio"
+        assert spark["widgets_values_named"]["dense_backend"] == "inherit"
         assert spark["widgets_values_named"]["dense_layers"] == 0
+        expected_mode = (
+            "speed"
+            if workflow_path.name
+            == "spark_h3_lbh_official_lightx2v_4step_5p2s_i2va.json"
+            else "fidelity"
+        )
+        assert spark["widgets_values_named"]["mode"] == expected_mode
+        expected_warmup_ratio = 0.0 if expected_mode == "speed" else 0.2
+        assert spark["widgets_values_named"]["warmup_mode"] == "warmup_ratio"
+        assert spark["widgets_values_named"]["warmup_ratio"] == expected_warmup_ratio
+        assert spark["widgets_values_named"]["warmup_steps"] == {
+            "spark_h3_vdn8_14p4s_t2va.json": 4,
+            "spark_h3_lightx2v_768p_8step_lora_14p4s_t2va.json": 2,
+            "spark_h3_larryvrh_8step_lora_14p4s_t2va.json": 2,
+            "spark_h3_dmad_4step_lora_5p2s_t2va.json": 1,
+            "spark_h3_lbh_official_lightx2v_4step_5p2s_i2va.json": 0,
+        }[workflow_path.name]
+        assert math.ceil(
+            spark["widgets_values_named"]["steps"]
+            * spark["widgets_values_named"]["warmup_ratio"]
+        ) == {
+            "spark_h3_vdn8_14p4s_t2va.json": 4,
+            "spark_h3_lightx2v_768p_8step_lora_14p4s_t2va.json": 2,
+            "spark_h3_larryvrh_8step_lora_14p4s_t2va.json": 2,
+            "spark_h3_dmad_4step_lora_5p2s_t2va.json": 1,
+            "spark_h3_lbh_official_lightx2v_4step_5p2s_i2va.json": 0,
+        }[workflow_path.name]
         expected_topk = (
             0.1
             if workflow_path.name
@@ -88,7 +126,7 @@ def test_standalone_package_is_small_complete_and_importable(tmp_path):
         assert spark["widgets_values_named"]["topk_ratio"] == expected_topk
         assert [entry["name"] for entry in spark["inputs"]] == [
             "model",
-            "enabled",
+            "mode",
             "steps",
             "warmup_mode",
             "warmup_ratio",
@@ -99,6 +137,7 @@ def test_standalone_package_is_small_complete_and_importable(tmp_path):
             "dense_layers",
             "min_tokens",
             "strict",
+            "dense_backend",
             "tail_granularity",
             "reblock_layout",
         ]
@@ -166,6 +205,7 @@ def test_standalone_package_is_small_complete_and_importable(tmp_path):
                 "precision": "fp16",
             }
             assert spark["widgets_values_named"]["steps"] == 3
+            assert spark["widgets_values_named"]["mode"] == "speed"
             assert spark["widgets_values_named"]["warmup_mode"] == "warmup_ratio"
             assert spark["widgets_values_named"]["warmup_ratio"] == 0.0
             assert spark["widgets_values_named"]["warmup_steps"] == 0
@@ -213,7 +253,9 @@ sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 assert 'MiniMaxH3SparkAttentionSM120' in module.NODE_CLASS_MAPPINGS
 assert 'MiniMaxH3SolAttentionSM120' in module.NODE_CLASS_MAPPINGS
+assert 'MiniMaxH3SparkAttentionSM86' not in module.NODE_CLASS_MAPPINGS
 assert 'MiniMaxH3SparkAttentionSM89' not in module.NODE_CLASS_MAPPINGS
+assert 'MiniMaxH3SparkAttentionSM86' not in module.NODE_DISPLAY_NAME_MAPPINGS
 assert 'MiniMaxH3SparkAttentionSM89' not in module.NODE_DISPLAY_NAME_MAPPINGS
 assert set(module.NODE_CLASS_MAPPINGS) == set(module.NODE_DISPLAY_NAME_MAPPINGS)
 assert 'MiniMaxH3Ref2VA12FPS480P' not in module.NODE_CLASS_MAPPINGS
@@ -490,14 +532,27 @@ for workflow_path in (root / 'workflows').glob('*.json'):
     ("architecture", "registered", "hidden"),
     (
         (
+            "sm86",
+            "MiniMaxH3SparkAttentionSM86",
+            (
+                "MiniMaxH3SparkAttentionSM89",
+                "MiniMaxH3SparkAttentionSM120",
+                "MiniMaxH3SolAttentionSM120",
+            ),
+        ),
+        (
             "sm89",
             "MiniMaxH3SparkAttentionSM89",
-            ("MiniMaxH3SparkAttentionSM120", "MiniMaxH3SolAttentionSM120"),
+            (
+                "MiniMaxH3SparkAttentionSM86",
+                "MiniMaxH3SparkAttentionSM120",
+                "MiniMaxH3SolAttentionSM120",
+            ),
         ),
         (
             "sm120",
             "MiniMaxH3SparkAttentionSM120",
-            ("MiniMaxH3SparkAttentionSM89",),
+            ("MiniMaxH3SparkAttentionSM86", "MiniMaxH3SparkAttentionSM89"),
         ),
     ),
 )
@@ -556,6 +611,17 @@ for workflow_path in (root / 'workflows').glob('*.json'):
         ],
         check=True,
     )
+    archive = builder.make_zip(
+        package,
+        tmp_path,
+        version="0.1.7",
+        architecture=architecture,
+        cuda_tag="cu130",
+        platform_tag="linux-x86_64",
+    )
+    assert archive.name == (
+        f"ComfyUI-Spark-H3-0.1.7-linux-x86_64-{architecture}-cu130.zip"
+    )
 
 
 def test_kernel_builder_applies_distinct_local_versions(tmp_path):
@@ -584,6 +650,18 @@ def test_kernel_builder_applies_distinct_local_versions(tmp_path):
             in sm89_pyproject.read_text(encoding="utf-8")
         )
 
+        sm86 = tmp_path / f"{base}-sm86"
+        sm86.mkdir()
+        sm86_pyproject = sm86 / "pyproject.toml"
+        sm86_pyproject.write_text(
+            f'[project]\nversion = "{base}"\n', encoding="utf-8"
+        )
+        kernel_builder._set_local_version(sm86, base, "sm86")
+        assert (
+            f'version = "{base}+spark.h3.sm86.cu130.1"'
+            in sm86_pyproject.read_text(encoding="utf-8")
+        )
+
         cu128 = tmp_path / f"{base}-cu128"
         cu128.mkdir()
         cu128_pyproject = cu128 / "pyproject.toml"
@@ -596,15 +674,49 @@ def test_kernel_builder_applies_distinct_local_versions(tmp_path):
             in cu128_pyproject.read_text(encoding="utf-8")
         )
 
+    assert kernel_builder.ARCHITECTURES["sm86"]["cuda_archs"] == "86"
     assert kernel_builder.ARCHITECTURES["sm89"]["cuda_archs"] == "89"
     assert kernel_builder.ARCHITECTURES["sm120"]["cuda_archs"] == "120f"
     assert kernel_builder._cuda_architecture("sm120", "cu128") == "120a"
     assert kernel_builder._cuda_architecture("sm120", "cu129") == "120a"
     assert kernel_builder._cuda_architecture("sm120", "cu130") == "120f"
+    assert kernel_builder._cuda_architecture("sm86", "cu130") == "86"
     assert kernel_builder._cuda_architecture("sm89", "cu128") == "89"
     assert kernel_builder._cuda_architecture("sm89", "cu130") == "89"
+    assert kernel_builder.architecture_for_capability((8, 6)) == "sm86"
     assert kernel_builder.architecture_for_capability((8, 9)) == "sm89"
     assert kernel_builder.architecture_for_capability((12, 0)) == "sm120"
+
+
+def test_kernel_builder_initializes_only_required_top_level_submodules(
+    tmp_path, monkeypatch
+):
+    kernel_builder = _load(
+        "spark_kernel_builder_submodules", ROOT / "comfyui/kernel_builder.py"
+    )
+    destination = tmp_path / "source"
+    calls = []
+
+    def run(command, *, cwd=None, env=None):
+        del env
+        calls.append((command, cwd))
+        if command[:2] == ["git", "clone"]:
+            destination.mkdir()
+
+    monkeypatch.setattr(kernel_builder, "_run", run)
+    monkeypatch.setattr(kernel_builder, "_patch_path", lambda _root: tmp_path / "patch")
+    monkeypatch.setattr(kernel_builder, "_set_local_version", lambda *_args, **_kwargs: None)
+    kernel_builder.prepare_source(
+        tmp_path,
+        destination,
+        source_url="https://example.invalid/comfy-kitchen.git",
+    )
+
+    clone = calls[0][0]
+    assert "--recursive" not in clone
+    submodule = next(command for command, _cwd in calls if command[:3] == ["git", "submodule", "update"])
+    assert "--recursive" not in submodule
+    assert submodule[-2:] == ["third_party/cutlass", "third_party/flash-attention"]
 
 
 def test_kernel_builder_recognizes_an_existing_release_wheel(tmp_path, monkeypatch):
@@ -689,6 +801,14 @@ def test_installer_selects_matching_base_from_local_wheels(tmp_path):
     assert not installer._wheel_matches(sm89.name, "0.2.36", "sm120")
     assert not installer._wheel_matches(wheels["0.2.36"].name, "0.2.36", "sm89")
 
+    sm86 = (
+        wheelhouse
+        / f"comfy_kitchen-0.2.36+spark.h3.sm86.cu130.1-{tag}.whl"
+    )
+    sm86.touch()
+    assert installer._matching_local_wheel(tmp_path, "0.2.36", "sm86") == sm86
+    assert not installer._wheel_matches(sm86.name, "0.2.36", "sm89")
+
 
 def test_installer_resolves_supported_installed_base(monkeypatch):
     installer = _load("spark_comfyui_installer_base", ROOT / "comfyui/install.py")
@@ -759,6 +879,7 @@ def test_installer_validates_runtime_and_package_platform(monkeypatch, tmp_path)
     ("cuda_version", "capability", "extra_args", "expected"),
     (
         ((13, 0), (12, 0), (), ("sm120", "cu130", None)),
+        ((13, 0), (8, 6), (), ("sm86", "cu130", None)),
         ((13, 0), (8, 9), (), ("sm89", "cu130", None)),
         (
             (12, 8),

@@ -18,7 +18,7 @@ to two decimal places and times to one decimal place after aggregation.
   evaluations. The table records actual DiT evaluations so that profiles whose
   requested and executed step counts match can be added without ambiguity.
 - Spark configuration: 10% Top-K, legacy midpoint, threshold routing, four
-  dense warmup evaluations, and one forced dense layer per sparse evaluation.
+  dense warmup steps, and one forced dense layer per sparse evaluation.
 - Runtime warmup is architecture-row specific. The A800 row uses a discarded
   pass through the four configured dense evaluations plus the first sparse
   evaluation. The PRO 6000 row uses the validated short pass with three

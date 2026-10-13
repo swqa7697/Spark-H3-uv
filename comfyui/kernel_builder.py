@@ -29,6 +29,7 @@ DEFAULT_KITCHEN_BASE = "0.2.37"
 DEFAULT_ARCHITECTURE = "sm120"
 DEFAULT_CUDA_TAG = "cu130"
 ARCHITECTURES = {
+    "sm86": {"capability": (8, 6), "cuda_archs": "86"},
     "sm89": {"capability": (8, 9), "cuda_archs": "89"},
     "sm120": {"capability": (12, 0), "cuda_archs": "120f"},
 }
@@ -146,11 +147,14 @@ def prepare_source(
     target = KITCHEN_TARGETS[kitchen_base]
     _run([
         "git", "clone", "--quiet", "--depth", "1", "--branch", target["tag"],
-        "--recursive", source_url, str(destination),
+        source_url, str(destination),
     ])
     _run(["git", "checkout", "--quiet", target["revision"]], cwd=destination)
     _run(
-        ["git", "submodule", "update", "--init", "--recursive", "--quiet"],
+        [
+            "git", "submodule", "update", "--init", "--depth", "1", "--quiet",
+            "third_party/cutlass", "third_party/flash-attention",
+        ],
         cwd=destination,
     )
     patch = _patch_path(node_root.resolve())

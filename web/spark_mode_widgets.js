@@ -1,16 +1,56 @@
 import { app } from "../../../scripts/app.js";
 
 const SPARK_NODES = new Set([
+    "MiniMaxH3SparkAttentionSM86",
+    "MiniMaxH3SparkAttentionSM89",
     "MiniMaxH3SparkAttentionSM120",
     "MiniMaxH3SolAttentionSM120",
 ]);
 const MODE_DEFAULTS = {
+    mode: "fidelity",
     warmup_mode: "warmup_ratio",
     warmup_ratio: 0.2,
     warmup_steps: 4,
     topk_mode: "topk_ratio",
     topk_blocks: 228,
 };
+
+const MODE_PRESETS = {
+    speed: { warmup_mode: "warmup_ratio", warmup_ratio: 0.0 },
+    fidelity: { warmup_mode: "warmup_ratio", warmup_ratio: 0.2 },
+};
+
+function applyModePreset(node) {
+    const widgets = new Map((node.widgets ?? []).map((widget) => [widget.name, widget]));
+    const preset = MODE_PRESETS[widgets.get("mode")?.value];
+    if (!preset) return;
+    for (const [name, value] of Object.entries(preset)) {
+        const widget = widgets.get(name);
+        if (widget && !modeIsLinked(node, name)) widget.value = value;
+    }
+}
+
+function presetMatches(node) {
+    const widgets = new Map((node.widgets ?? []).map((widget) => [widget.name, widget]));
+    const mode = widgets.get("mode")?.value;
+    const preset = MODE_PRESETS[mode];
+    if (!preset) return true;
+    if (modeIsLinked(node, "warmup_mode") || modeIsLinked(node, "warmup_ratio")) {
+        return false;
+    }
+    return widgets.get("warmup_mode")?.value === preset.warmup_mode &&
+        Math.abs(Number(widgets.get("warmup_ratio")?.value) - preset.warmup_ratio) < 1e-9;
+}
+
+function markCustomIfNeeded(node, notify = true) {
+    const mode = node.widgets?.find((widget) => widget.name === "mode");
+    if (!mode || modeIsLinked(node, "mode") || !MODE_PRESETS[mode.value] || presetMatches(node)) {
+        return;
+    }
+    const previousValue = mode.value;
+    mode.value = "custom";
+    if (notify) node.onWidgetChanged?.("mode", mode.value, previousValue, mode);
+}
 
 function modeIsLinked(node, name) {
     const input = node.inputs?.find((item) => item.name === name);
@@ -24,6 +64,52 @@ function setVisible(widget, visible) {
     widget.options.hidden = !visible;
 }
 
+function installTwoStageHint(node) {
+    if (typeof node.addWidget !== "function" || node._sparkTwoStageHint) return;
+    const hint = node.addWidget(
+        "button",
+        "双采工作流的高分辨率二阶段：关闭 dense warmup → 切换到 speed",
+        null,
+        () => {
+            const mode = node.widgets?.find((widget) => widget.name === "mode");
+            if (!mode || modeIsLinked(node, "mode")) return;
+            const previousValue = mode.value;
+            mode.value = "speed";
+            applyModePreset(node);
+            node.onWidgetChanged?.("mode", mode.value, previousValue, mode);
+            syncModeWidgets(node);
+        },
+        { serialize: false },
+    );
+    hint.serialize = false;
+    hint.options ??= {};
+    hint.options.serialize = false;
+    node._sparkTwoStageHint = hint;
+}
+
+function installDenseBackendHint(node) {
+    const backend = node.widgets?.find((widget) => widget.name === "dense_backend");
+    if (!backend || typeof node.addWidget !== "function" || node._sparkDenseBackendHint) return;
+    const hint = node.addWidget(
+        "button",
+        "warmup 阶段现可使用 Kitchen INT8 加速 → 切换到 kitchen",
+        null,
+        () => {
+            if (modeIsLinked(node, "dense_backend")) return;
+            const previousValue = backend.value;
+            backend.value = "kitchen";
+            backend.callback?.(backend.value);
+            node.onWidgetChanged?.("dense_backend", backend.value, previousValue, backend);
+            syncModeWidgets(node);
+        },
+        { serialize: false },
+    );
+    hint.serialize = false;
+    hint.options ??= {};
+    hint.options.serialize = false;
+    node._sparkDenseBackendHint = hint;
+}
+
 function syncModeWidgets(node) {
     const widgets = new Map((node.widgets ?? []).map((widget) => [widget.name, widget]));
     const topkMode = widgets.get("topk_mode")?.value ?? "topk_ratio";
@@ -32,10 +118,16 @@ function syncModeWidgets(node) {
     // A linked mode is decided at execution time, so keep both values editable.
     const topkLinked = modeIsLinked(node, "topk_mode");
     const warmupLinked = modeIsLinked(node, "warmup_mode");
+    const modeLinked = modeIsLinked(node, "mode");
     setVisible(widgets.get("topk_ratio"), topkLinked || topkMode === "topk_ratio");
     setVisible(widgets.get("topk_blocks"), topkLinked || topkMode === "topk_blocks");
     setVisible(widgets.get("warmup_ratio"), warmupLinked || warmupMode === "warmup_ratio");
     setVisible(widgets.get("warmup_steps"), warmupLinked || warmupMode === "warmup_steps");
+    setVisible(node._sparkTwoStageHint, !modeLinked && widgets.get("mode")?.value === "fidelity");
+    setVisible(
+        node._sparkDenseBackendHint,
+        !modeIsLinked(node, "dense_backend") && widgets.get("dense_backend")?.value === "inherit",
+    );
 
     if (typeof node.computeSize === "function" && typeof node.setSize === "function") {
         const [width, height] = node.computeSize();
@@ -51,13 +143,17 @@ app.registerExtension({
         if (!SPARK_NODES.has(comfyClass)) return;
         if (node._sparkModeWidgetsInstalled) return;
         node._sparkModeWidgetsInstalled = true;
+        installTwoStageHint(node);
+        installDenseBackendHint(node);
 
-        for (const name of ["topk_mode", "warmup_mode"]) {
+        for (const name of ["mode", "topk_mode", "warmup_mode", "warmup_ratio", "warmup_steps", "dense_backend"]) {
             const widget = node.widgets?.find((item) => item.name === name);
             if (!widget) continue;
             const previousCallback = widget.callback;
             widget.callback = function (...args) {
                 const result = previousCallback?.apply(this, args);
+                if (name === "mode") applyModePreset(node);
+                markCustomIfNeeded(node);
                 syncModeWidgets(node);
                 return result;
             };
@@ -66,6 +162,7 @@ app.registerExtension({
         const previousConnectionsChange = node.onConnectionsChange;
         node.onConnectionsChange = function (...args) {
             const result = previousConnectionsChange?.apply(this, args);
+            markCustomIfNeeded(this);
             syncModeWidgets(this);
             return result;
         };
@@ -77,7 +174,11 @@ app.registerExtension({
             const saved = serialized?.widgets_values_named;
             if (saved) {
                 for (const widget of this.widgets ?? []) {
-                    if (widget.name === "warmup_ratio" &&
+                    if (widget.name === "mode" &&
+                        !Object.prototype.hasOwnProperty.call(saved, "mode") &&
+                        saved.enabled === false) {
+                        widget.value = "dense";
+                    } else if (widget.name === "warmup_ratio" &&
                         !Object.prototype.hasOwnProperty.call(saved, "warmup_ratio") &&
                         Object.prototype.hasOwnProperty.call(saved, "warmup_percent")) {
                         widget.value = Number(saved.warmup_percent) / 100.0;
@@ -101,6 +202,7 @@ app.registerExtension({
                 }
                 if (mode?.value === "warmup_percent") mode.value = "warmup_ratio";
             }
+            markCustomIfNeeded(this, false);
             syncModeWidgets(this);
             return result;
         };
@@ -109,6 +211,7 @@ app.registerExtension({
     loadedGraphNode(node) {
         const comfyClass = node.comfyClass ?? node.constructor?.comfyClass;
         if (SPARK_NODES.has(comfyClass)) {
+            markCustomIfNeeded(node, false);
             syncModeWidgets(node);
         }
     },

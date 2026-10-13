@@ -5,11 +5,12 @@
   <a href="README.zh-CN.md">简体中文</a>
 </p>
 
-Spark-H3 provides **MiniMax H3 Spark Attention (SM89)** and **MiniMax H3
-Spark Attention (SM120)** nodes for ComfyUI's native MiniMax-H3 implementation.
+Spark-H3 provides **MiniMax H3 Spark Attention (SM86)**, **MiniMax H3 Spark
+Attention (SM89)**, and **MiniMax H3 Spark Attention (SM120)** nodes for
+ComfyUI's native MiniMax-H3 implementation.
 Place the matching node between the model loader and `BasicGuider`, and apply
 only one attention patch to a model. The current release targets Linux or Windows x86_64, NVIDIA
-SM89 (GeForce RTX 40 series) or SM120 (GeForce RTX 50 series and RTX PRO
+SM86 (GeForce RTX 30 series), SM89 (GeForce RTX 40 series), or SM120 (GeForce RTX 50 series and RTX PRO
 5000/6000 Blackwell), and CUDA BF16 execution.
 
 ## Installation
@@ -50,6 +51,48 @@ Diffusers `h3_lbh` path. See the
 [Spark node parameter reference](../docs/comfyui_spark_node_parameters.md)
 (currently in Chinese) for the full interface.
 
+The first Spark option is ordered as `fidelity`, `speed`, `custom`, `dense`.
+`fidelity` (default) uses 20% of model evaluations as dense warmup steps, `speed` uses none,
+`custom` uses manually configured warmup values, and `dense` returns the
+unmodified model. The former enable switch is gone, but `warmup_mode`,
+`warmup_ratio`, and `warmup_steps` remain available; manual changes after
+selecting a preset automatically change the profile to `custom` when an active
+warmup value no longer matches. Changing an inactive value does not. Switching
+to `dense` preserves those values so switching back does not discard an
+advanced configuration. Selecting `fidelity` again reapplies its 20% warmup to
+unlinked controls. In `fidelity`, a non-serialized reminder button offers one-click
+switching to `speed`, as recommended for the high-resolution second pass of a
+two-pass workflow.
+
+`dense_backend` controls dense warmup steps, permanently dense layers, short-sequence
+execution, and non-strict fallback calls. Keep the default `inherit` to follow
+the model's or ComfyUI's configured attention backend, or select `kitchen`, `sage`, or `sdpa`
+to force an available registered backend for those calls only. This is a
+Python-level dispatch choice and does not require rebuilding the architecture-
+specific Spark wheel. `sage` requires SageAttention to be installed, while
+`kitchen` requires comfy-kitchen INT8 attention support.
+While the unlinked setting remains `inherit`, the node shows a non-serialized
+button announcing that Kitchen INT8 is available for dense stages. Clicking it
+switches `dense_backend` to `kitchen`; the default remains `inherit`.
+
+### KJNodes low-VRAM patches
+
+Spark composes with ComfyUI-KJNodes' `MiniMax H3 Low VRAM Attention` and
+`MiniMax H3 Chunk FeedForward`. Use this supported MODEL-chain order:
+
+```text
+model loader -> MiniMax H3 Low VRAM Attention -> MiniMax H3 Chunk FeedForward
+             -> MiniMax H3 Spark Attention -> BasicGuider
+```
+
+Low VRAM Attention must precede Spark. Spark detects its `sol_take_forward`
+compose hook while installing the model patch and selects a separate head-chunk
+path. Without that node, Spark installs the original block patch and adds no
+per-layer compatibility branch. Chunk FeedForward only chunks the MLP and is
+orthogonal to the attention patch. Both integrations reuse the existing Spark
+CUDA entry point, so the SM86, SM89, and SM120 wheels do not need rebuilding.
+Additional chunks normally reduce peak VRAM at the cost of more kernel launches.
+
 Convert the original Larryvrh weights with
 `tools/convert_larryvrh_lora_comfyui.py`. The conversion retains 208 backbone
 LoRAs and projects 51 AdaLN updates onto the pruned model's eight-dimensional
@@ -62,7 +105,7 @@ low-resolution stage performs four model evaluations, separates the audio and
 video latents from `denoised_output`, and upscales only the video latent. It
 then re-noises at 0.98 MP and performs three high-resolution evaluations with
 `0.9035, 0.6316, 0.3158, 0.0`. Spark applies only to the second stage, with
-zero warmup and 10% Top-K. Install
+`mode=speed` and 10% Top-K. Install
 `LBH-123-AI/Comfyui_Minimax_h3_latent_Upscaler` and place
 `minimax_h3_latent_upscaler_3d_conv_v1_fp16.safetensors` under
 `ComfyUI/models/latent_upscale_models/`.

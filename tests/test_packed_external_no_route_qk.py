@@ -29,6 +29,7 @@ def test_route_qk_free_default_falls_back_outside_supported_gpus():
     requested = "packed_external_no_route_qk"
     assert _effective_topk_execution(requested, (12, 0)) == requested
     assert _effective_topk_execution(requested, (8, 0)) == requested
+    assert _effective_topk_execution(requested, (8, 6)) == requested
     assert _effective_topk_execution(requested, (8, 9)) == requested
     assert _effective_topk_execution(requested, (9, 0)) == "threshold"
     assert _effective_topk_execution("threshold", (12, 0)) == "threshold"
@@ -78,8 +79,8 @@ def test_sm80_route_qk_free_kernel_is_packed_external_only():
 
 @pytest.mark.skipif(
     not torch.cuda.is_available()
-    or tuple(torch.cuda.get_device_capability(0)) not in ((8, 0), (8, 9)),
-    reason="packed external route requires SM80 or SM89",
+    or tuple(torch.cuda.get_device_capability(0)) not in ((8, 0), (8, 6), (8, 9)),
+    reason="packed external route requires SM80, SM86, or SM89",
 )
 def test_sm80_route_qk_free_matches_fused_topk(monkeypatch):
     from sol_attn.preprocess import _reduce_kv

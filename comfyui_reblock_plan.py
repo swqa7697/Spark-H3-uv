@@ -5,10 +5,20 @@ controller.  It shares only low-level mathematical primitives.
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import torch
 
 
 BLOCK_SIZE = 64
+
+
+def _enable_local_imports() -> None:
+    """ComfyUI 0.38 can load a node without adding its directory to sys.path."""
+    node_dir = str(Path(__file__).resolve().parent)
+    if node_dir not in sys.path:
+        sys.path.insert(0, node_dir)
 
 
 @torch.no_grad()
@@ -25,6 +35,7 @@ def build_comfy_reblock_permutations(controller, query_bthd, key_bthd, layout):
             hilbert_midpoint_sample_indices,
         )
     except ImportError:  # Direct source-tree imports used by tests and development.
+        _enable_local_imports()
         from h3_sparse_attention.landmark_direction import (
             landmark_direction_factors,
             landmark_single_direction_factor,
@@ -209,6 +220,7 @@ def build_comfy_reblock_permutations(controller, query_bthd, key_bthd, layout):
             )
             from .h3_sparse_attention.reblock_hierarchy import build_reblock_hierarchy
         except ImportError:  # Direct source-tree imports used by tests and development.
+            _enable_local_imports()
             from h3_sparse_attention.landmark_projection import project_bthd
             from h3_sparse_attention.landmark_v2_fused_node import (
                 fused_proxy_directions,

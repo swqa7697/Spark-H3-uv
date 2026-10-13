@@ -1,4 +1,5 @@
 import os
+from collections import Counter
 from pathlib import Path
 import subprocess
 import sys
@@ -14,13 +15,20 @@ if str(COMFY) not in sys.path:
 from comfyui_nodes import (
     LoadMiniMaxH3AVLatentCache,
     MiniMaxH3SolAttentionSM120,
+    MiniMaxH3SparkAttentionSM86,
     MiniMaxH3SparkAttentionSM89,
     MiniMaxH3SparkAttentionSM120,
     SaveMiniMaxH3AVLatentCache,
     _RunState,
+    _dense_attention_override,
+    _dense_block_args,
     _enable_cu128_cuda_backend,
     _make_spark_layout,
+    _make_kj_low_vram_attention_override,
+    _make_kj_low_vram_spark_block_patch,
+    _spark_mode_is_dense,
 )
+from comfyui_ref2va import ROPE_SCALE_KEY, _apply_physical_time_rope
 
 
 def test_h3_av_latent_cache_roundtrip(tmp_path, monkeypatch):
@@ -64,6 +72,35 @@ def test_comfy_layout_moves_target_video_first_and_roundtrips():
     values = torch.arange(11)
     restored = values[spark.permutation][spark.inverse_permutation]
     torch.testing.assert_close(restored, values)
+
+
+def test_ref2va_12fps_480p_layout_matches_validated_diffusers_shape():
+    from comfy.ldm.minimax.model import PackedLayout
+
+    refs = [
+        {
+            "kind": "video_audio",
+            "latent_t": 17,
+            "latent_h": 30,
+            "latent_w": 52,
+            "ref_audio_t": 207,
+            ROPE_SCALE_KEY: 2.0,
+        },
+        {"kind": "audio", "ref_audio_t": 207},
+    ]
+    layout = PackedLayout(2807, 37, 48, 84, 207, refs=refs)
+    original = layout.position_ids.clone()
+    assert layout.seq_len == 47975
+    reference_start, reference_stop, kind = layout.segments[2]
+    assert kind == "ref_img"
+    assert reference_stop - reference_start == 6630
+
+    assert _apply_physical_time_rope({"layout": layout, "refs": refs})
+    origin = original[reference_start, 0]
+    torch.testing.assert_close(
+        layout.position_ids[reference_start:reference_stop, 0],
+        origin + (original[reference_start:reference_stop, 0] - origin) * 2.0,
+    )
 
 
 def test_run_state_uses_comfy_model_evaluation_count_and_resets():
@@ -135,21 +172,107 @@ def test_spark_warmup_steps_mode_and_limits():
         fixed.begin_evaluation({"sigmas": torch.tensor([1.0 - index * 0.1])})
         assert fixed.is_warmup == (index < 4)
     inputs = MiniMaxH3SparkAttentionSM120.INPUT_TYPES()["required"]
+    assert MiniMaxH3SparkAttentionSM86.TARGET_CAPABILITY == (8, 6)
     assert MiniMaxH3SparkAttentionSM89.TARGET_CAPABILITY == (8, 9)
     assert MiniMaxH3SparkAttentionSM120.TARGET_CAPABILITY == (12, 0)
+    assert inputs["mode"][0] == ["fidelity", "speed", "custom", "dense"]
+    assert inputs["mode"][1]["default"] == "fidelity"
+    assert list(inputs).index("mode") == 1
+    assert "enabled" not in inputs
     assert inputs["warmup_mode"][0] == ["warmup_ratio", "warmup_steps"]
     assert inputs["warmup_ratio"][1]["default"] == 0.2
+    assert inputs["warmup_steps"][1]["default"] == 4
     assert list(inputs).index("warmup_mode") < list(inputs).index("warmup_ratio") < list(inputs).index("warmup_steps")
     assert MiniMaxH3SparkAttentionSM120.INPUT_TYPES()["required"]["topk_ratio"][1]["default"] == 0.2
     assert MiniMaxH3SparkAttentionSM120.INPUT_TYPES()["required"]["dense_layers"][1]["default"] == 0
     assert MiniMaxH3SparkAttentionSM120.INPUT_TYPES()["required"]["min_tokens"][1]["default"] == 12288
-    assert "warmup_mode" not in MiniMaxH3SolAttentionSM120.INPUT_TYPES()["required"]
+    assert MiniMaxH3SparkAttentionSM120.INPUT_TYPES()["optional"]["dense_backend"] == (
+        ["inherit", "kitchen", "sage", "sdpa"],
+        {
+            "default": "inherit",
+            "tooltip": "Dense 预热、固定 dense 层和 dense 回退所用的 attention 后端。inherit 不强制覆盖，沿用模型或 ComfyUI 当前设置；kitchen、sage、sdpa 强制使用对应后端。",
+        },
+    )
+    assert MiniMaxH3SolAttentionSM120.INPUT_TYPES()["required"]["mode"][0] == [
+        "fidelity", "speed", "custom", "dense",
+    ]
+    assert "warmup_mode" in MiniMaxH3SolAttentionSM120.INPUT_TYPES()["required"]
+    assert "dense_backend" not in MiniMaxH3SolAttentionSM120.INPUT_TYPES()["optional"]
     with pytest.raises(ValueError, match="warmup_mode"):
         _RunState.create(20, 0.1, 0.1, warmup_mode="invalid")
     with pytest.raises(ValueError, match="warmup_steps"):
         _RunState.create(20, 0.1, 0.1, warmup_steps=-1)
     with pytest.raises(ValueError, match="warmup_ratio"):
         _RunState.create(20, 20.0, 0.1)
+
+
+def test_spark_public_modes_validate_and_only_dense_bypasses():
+    assert not _spark_mode_is_dense("fidelity")
+    assert not _spark_mode_is_dense("speed")
+    assert not _spark_mode_is_dense("custom")
+    assert _spark_mode_is_dense("dense")
+    with pytest.raises(ValueError, match="mode"):
+        _spark_mode_is_dense("invalid")
+
+
+def test_dense_backend_override_uses_comfy_registry_and_preserves_inherit(monkeypatch):
+    from comfy.ldm.modules import attention as comfy_attention
+
+    calls = []
+
+    def selected(*args, **kwargs):
+        calls.append((args, kwargs))
+        return "selected"
+
+    def selected_containers(*args, **kwargs):
+        return "containers"
+
+    selected.container_function = selected_containers
+    requested = []
+
+    def get_attention_function(name, default):
+        requested.append((name, default))
+        return selected
+
+    monkeypatch.setattr(comfy_attention, "get_attention_function", get_attention_function)
+    assert _dense_attention_override("inherit") is None
+    override = _dense_attention_override("kitchen")
+    assert requested == [("comfy_kitchen_int8", None)]
+    assert override("previous", 1, flag=True) == "selected"
+    assert calls == [((1,), {"flag": True})]
+    assert override.container_function is selected_containers
+    assert override.dense_backend == "kitchen"
+
+
+def test_dense_backend_validation_and_unavailable_dependency(monkeypatch):
+    from comfy.ldm.modules import attention as comfy_attention
+
+    with pytest.raises(ValueError, match="dense_backend"):
+        _dense_attention_override("unknown")
+    monkeypatch.setattr(
+        comfy_attention, "get_attention_function", lambda _name, _default: None
+    )
+    with pytest.raises(RuntimeError, match="sageattention"):
+        _dense_attention_override("sage")
+    with pytest.raises(RuntimeError, match="INT8 attention"):
+        _dense_attention_override("kitchen")
+
+
+def test_dense_backend_is_scoped_to_dense_block_call():
+    original_override = object()
+    selected_override = object()
+    transformer_options = {
+        "sigmas": torch.tensor([1.0]),
+        "optimized_attention_override": original_override,
+    }
+    args = {"img": torch.empty(1), "transformer_options": transformer_options}
+
+    assert _dense_block_args(args, None) is args
+    overridden = _dense_block_args(args, selected_override)
+    assert overridden is not args
+    assert overridden["transformer_options"] is not transformer_options
+    assert overridden["transformer_options"]["optimized_attention_override"] is selected_override
+    assert transformer_options["optimized_attention_override"] is original_override
 
 
 def test_spark_ablation_modes_are_orthogonal():
@@ -465,6 +588,7 @@ class MiniMaxH3Model:
 class _FakePatcher:
     def __init__(self, diffusion_model):
         self.diffusion_model = diffusion_model
+        self.model_options = {"transformer_options": {}}
         self.object_patches = {}
         self.model_sampling = SimpleNamespace(percent_to_sigma=lambda percent: 1.0 - percent)
         self.block_patches = {}
@@ -472,6 +596,11 @@ class _FakePatcher:
 
     def clone(self):
         clone = _FakePatcher(self.diffusion_model)
+        clone.model_options = {
+            "transformer_options": dict(
+                self.model_options.get("transformer_options", {})
+            )
+        }
         clone.object_patches = dict(self.object_patches)
         clone.block_patches = dict(self.block_patches)
         clone.callbacks = list(self.callbacks)
@@ -505,15 +634,172 @@ class _FakePatcher:
 def test_spark_node_uses_comfyui_native_block_patches_and_cleanup():
     model = _FakePatcher(MiniMaxH3Model())
     (patched,) = MiniMaxH3SparkAttentionSM120().patch(
-        model, True, 20, 0.1, 0.1, 1, 4096, True
+        model, "fidelity", 20, "warmup_ratio", 0.2, 4,
+        0.1, 1, 4096, True, dense_backend="sdpa"
     )
     assert patched is not model
     assert sorted(patched.block_patches) == [
         ("dit", "double_block", i, None) for i in range(3)
     ]
     assert patched.object_patches == {}
+    assert not any(
+        getattr(patch, "spark_kj_low_vram", False)
+        for patch in patched.block_patches.values()
+    )
     assert len(patched.callbacks) == 1
     assert patched.callbacks[0][1] == "spark_h3_native_attention"
+
+    captured = {}
+
+    def original_block(args):
+        captured.update(args["transformer_options"])
+        return "dense"
+
+    block_patch = patched.block_patches[("dit", "double_block", 0, None)]
+    result = block_patch(
+        {
+            "img": torch.empty(8, 16),
+            "rope_freqs": None,
+            "transformer_options": {"sigmas": torch.tensor([1.0])},
+        },
+        {"original_block": original_block},
+    )
+    assert result == "dense"
+    override = captured["optimized_attention_override"]
+    assert override.dense_backend == "sdpa"
+
+    assert MiniMaxH3SparkAttentionSM120().patch(
+        model, "dense", 20, "warmup_ratio", 0.2, 4, 0.1, 1, 4096, True
+    ) == (model,)
+
+
+def test_spark_node_selects_kj_low_vram_patch_only_at_install_time():
+    model = _FakePatcher(MiniMaxH3Model())
+
+    def low_vram_forward(*_args, **_kwargs):
+        raise AssertionError("compose hook is not called while installing")
+
+    low_vram_forward._uses_optimized_attention = True
+    model.model_options["transformer_options"]["sol_take_forward"] = low_vram_forward
+    (patched,) = MiniMaxH3SparkAttentionSM120().patch(
+        model, "speed", 20, "warmup_ratio", 0.0, 4,
+        0.1, 0, 4096, True,
+    )
+    assert all(
+        getattr(patch, "spark_kj_low_vram", False)
+        for patch in patched.block_patches.values()
+    )
+
+    plain = _FakePatcher(MiniMaxH3Model())
+    plain.model_options["transformer_options"]["sol_take_forward"] = lambda: None
+    with pytest.raises(RuntimeError, match="incompatible sol_take_forward"):
+        MiniMaxH3SparkAttentionSM120().patch(
+            plain, "speed", 20, "warmup_ratio", 0.0, 4,
+            0.1, 0, 4096, True,
+        )
+
+
+def test_spark_preserves_kjnodes_chunk_feedforward_object_patches():
+    model = _FakePatcher(MiniMaxH3Model())
+    sentinels = {}
+    for index in range(3):
+        key = f"diffusion_model.blocks.{index}.mlp.forward"
+        sentinels[key] = object()
+    model.object_patches.update(sentinels)
+
+    (patched,) = MiniMaxH3SparkAttentionSM120().patch(
+        model, "speed", 20, "warmup_ratio", 0.0, 4,
+        0.1, 0, 4096, True,
+    )
+    assert patched.object_patches == sentinels
+    assert all(
+        not getattr(patch, "spark_kj_low_vram", False)
+        for patch in patched.block_patches.values()
+    )
+
+
+def test_kj_low_vram_override_converts_layout_and_restores_native_order(monkeypatch):
+    from comfyui_backend import ComfyPackedLayout
+    import comfyui_nodes
+
+    permutation = torch.tensor([2, 3, 0, 1])
+    inverse = torch.empty_like(permutation)
+    inverse[permutation] = torch.arange(4)
+    layout = ComfyPackedLayout(
+        permutation=permutation,
+        inverse_permutation=inverse,
+        grid=(1, 1, 2),
+        video_tokens=2,
+        sequence_length=4,
+        video_positions=torch.zeros(2, 3),
+        video_start=2,
+    )
+    controller = SimpleNamespace(
+        counts=Counter(), output_in_original_layout=False,
+    )
+    state = SimpleNamespace(
+        controller=controller,
+        spark_layout=lambda *_args: layout,
+    )
+    activation = SimpleNamespace(hit=lambda *_args: None)
+    captured = {}
+
+    def backend(_controller, q, k, v, got_layout, got_layer):
+        captured.update(q=q.clone(), k=k.clone(), v=v.clone(),
+                        layout=got_layout, layer=got_layer)
+        return q.clone()
+
+    monkeypatch.setattr(comfyui_nodes, "comfy_kitchen_spark_attention", backend)
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda *_args: (12, 0))
+    options = {"minimax_h3_layout": object()}
+    override = _make_kj_low_vram_attention_override(
+        7, state, activation, options
+    )
+    q = torch.arange(1 * 2 * 4 * 128, dtype=torch.bfloat16).reshape(1, 2, 4, 128)
+    out = override(None, q, q + 1, q + 2, 2, skip_reshape=True)
+
+    expected_bthd = q.transpose(1, 2).index_select(1, permutation).contiguous()
+    torch.testing.assert_close(captured["q"], expected_bthd)
+    assert captured["layout"] is layout and captured["layer"] == 7
+    expected = expected_bthd.index_select(1, inverse).reshape(1, 4, 256)
+    torch.testing.assert_close(out, expected)
+    assert controller.counts["sparse:spark_comfy_kj_low_vram"] == 1
+
+
+def test_kj_low_vram_block_keeps_attention_owned_by_kjnodes(monkeypatch):
+    import comfyui_nodes
+
+    monkeypatch.setattr(
+        comfyui_nodes, "_native_spark_eligible", lambda *_args: (None, False)
+    )
+    block = SimpleNamespace(attn=_FakeAttention())
+    policy = SimpleNamespace(log_once=lambda *_args: None)
+    state = SimpleNamespace(
+        controller=SimpleNamespace(
+            evaluation_index=0, counts=Counter(), output_in_original_layout=False,
+        ),
+        warmup_evaluations=0,
+    )
+    activation = SimpleNamespace(fallbacks=set(), miss=lambda *_args: None)
+    patch = _make_kj_low_vram_spark_block_patch(
+        block, 3, policy, state, activation, True, None
+    )
+    captured = {}
+
+    def original_block(got):
+        captured.update(got)
+        return "sparse-low-vram"
+
+    args = {
+        "img": torch.empty(8, 16),
+        "rope_freqs": object(),
+        "transformer_options": {"minimax_h3_layout": object()},
+    }
+    assert patch(args, {"original_block": original_block}) == "sparse-low-vram"
+    assert "attention" not in captured
+    assert captured["transformer_options"][
+        "optimized_attention_override"
+    ].spark_kj_low_vram
 
 
 def test_sol_node_delegates_to_comfyui_official_patch(monkeypatch):
@@ -528,7 +814,7 @@ def test_sol_node_delegates_to_comfyui_official_patch(monkeypatch):
     import comfy_extras.nodes_sparse_attention as official_module
     monkeypatch.setattr(official_module, "apply_block_sparse_attention", official)
     (patched,) = MiniMaxH3SolAttentionSM120().patch(
-        model, True, 20, 0.2, 1, 4096, True, 1.0
+        model, "fidelity", 20, "warmup_steps", 0.9, 4, 1, 4096, True, 1.0
     )
     assert patched is not model
     assert captured["tau"] == 1.0
@@ -560,8 +846,8 @@ def test_comfyui_pipeline_does_not_import_diffusers_pipeline():
 
 @pytest.mark.skipif(
     not torch.cuda.is_available()
-    or torch.cuda.get_device_capability() not in ((8, 9), (12, 0)),
-    reason="SM89 or SM120 CUDA device required",
+    or torch.cuda.get_device_capability() not in ((8, 6), (8, 9), (12, 0)),
+    reason="SM86, SM89, or SM120 CUDA device required",
 )
 def test_comfy_native_chunked_qkv_matches_monolithic_projection():
     import comfy.model_management

@@ -79,15 +79,28 @@ Insert the node after `UNETLoader` and before `BasicGuider`:
 UNETLoader -> MiniMax H3 Spark Attention (SM89 or SM120) -> BasicGuider
 ```
 
+When using ComfyUI-KJNodes' optional low-VRAM patches, keep this order so Spark
+can select its opt-in compatibility path at patch-install time:
+
+```text
+UNETLoader -> MiniMax H3 Low VRAM Attention -> MiniMax H3 Chunk FeedForward
+           -> MiniMax H3 Spark Attention -> BasicGuider
+```
+
+The integration is Python-only and reuses the existing architecture-specific
+wheel. Workflows without these KJNodes continue to install the original Spark
+block patch.
+
 The [14.4 s native model example](workflows/spark_h3_vdn8_14p4s_t2va.json)
 uses the complete three-shot VDN prompt 8, 345 frames at 1344×768, and a
 20-step sampler. It has one Spark patch in the model path, without a Turbo
 LoRA or a second sparse-attention patch. It uses the same 20% Top-K ratio as
-the LoRA examples, with four dense warmup evaluations. Bundled workflows
+the LoRA examples, with `mode=fidelity` and four dense warmup steps. Bundled workflows
 default to the official `minimax_h3_video_vae_fp16.safetensors`.
 
 Two matching 14.4-second, 8-step LoRA examples use the same full prompt,
-seed, resolution, Spark 20% Top-K ratio, and two dense warmup evaluations. The
+seed, resolution, Spark 20% Top-K ratio, and `mode=fidelity` (two dense warmup
+steps). The
 DMAD and Alibaba-PAI examples retain the sampling protocol required by their
 respective students:
 
@@ -165,11 +178,10 @@ the Ref2VA weight only with a Ref2VA base. Use CFG 1.0, video/audio shifts
 `SamplerCustomAdvanced`; do not substitute `BasicScheduler`, `res_multistep`,
 or another distillation LoRA.
 
-The defaults select a 20% Top-K ratio, 20% dense warmup, and the first
-transformer block kept dense. Set `steps` to the
+The defaults select `mode=fidelity`, with 20% of model evaluations used as dense warmup steps, a 20% Top-K ratio,
+and no permanently dense transformer blocks. Set `steps` to the
 number of model evaluations made by the sampler (normally the sampler's step
-count). The warmup ratio is converted to an exact number of model evaluations;
-minimum-token and dense-layer gating use the same
+count). Minimum-token and dense-layer gating use the same
 policy object as ComfyUI's official sparse node.
 The public Spark node uses the full reweight path and a dense video tail;
 research ablation and tail-mode controls are not exposed in the node UI.
@@ -184,12 +196,31 @@ The default `topk_mode=topk_ratio` selects a fraction of the target video's
 of candidate video blocks, while conditioning/sink blocks remain exact and
 do not consume the Top-K budget. To use a 10% ratio, set `topk_mode=topk_ratio`
 and `topk_ratio=0.1`.
-`warmup_mode=warmup_ratio` (default) computes dense warmup as the ceiling of
-`steps * warmup_ratio`, where `0.2` means 20%; `warmup_mode=warmup_steps`
-uses the fixed
-`warmup_steps` count (default 4). Both modes cap warmup at `steps`.
-The frontend migrates legacy workflow values such as `warmup_percent=20` to
-`warmup_ratio=0.2` when loading the graph.
+The top-level `mode` is ordered as `fidelity`, `speed`, `custom`, `dense`.
+Selecting `speed` fills `warmup_mode=warmup_ratio` and
+`warmup_ratio=0`; selecting `fidelity` fills the same mode and a `0.2` ratio.
+Changing an active warmup control away from those values automatically changes
+the profile to `custom`; changing the inactive `warmup_steps` field does not.
+Linking a preset-controlled warmup input also selects `custom`, since its
+runtime value is no longer guaranteed. Selecting a preset again overwrites its
+unlinked warmup mode and ratio. `dense` replaces the former `enabled=false`: it returns the
+original model without installing a Spark patch, while preserving the warmup
+values for a later switch back to Spark.
+While `fidelity` is selected, the node shows a non-serialized reminder button
+for two-pass workflows. Use `speed` for the high-resolution second pass; the
+button applies that preset directly without adding an execution parameter.
+`dense_backend=inherit` keeps the model's or ComfyUI's configured attention choice for dense
+warmup steps, dense layers, short sequences, and non-strict fallbacks. The `sdpa`,
+`sage`, and `kitchen` choices override only those dense calls through ComfyUI's
+attention registry; switching among already available backends does not require
+rebuilding the Spark kernel wheels.
+While the unlinked value is `inherit`, a non-serialized button reads “warmup
+阶段现可使用 Kitchen INT8 加速 → 切换到 kitchen”. Clicking it selects `kitchen`
+and hides the hint without changing the `inherit` default.
+Bundled legacy workflows map zero warmup to `speed` and nonzero warmup to
+`fidelity`. The fidelity preset uses 20%: the native 20-step workflow has four
+dense evaluations, while the 8-step and 4-step workflows round up to two and
+one respectively.
 `strict=true` is recommended: it reports an incompatible ComfyUI build,
 dtype, GPU, or kernel error instead of silently switching to dense attention.
 

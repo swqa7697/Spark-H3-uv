@@ -14,15 +14,18 @@ from pathlib import Path
 
 SUPPORTED_KITCHEN_BASES = ("0.2.36", "0.2.37")
 SUPPORTED_ARCHITECTURES = {
+    (8, 6): "sm86",
     (8, 9): "sm89",
     (12, 0): "sm120",
 }
 BACKEND_LOCAL_VERSION_PREFIXES = {
+    "sm86": "spark.h3.sm86",
     "sm89": "spark.h3.sm89",
     "sm120": "spark.h3.sm120",
 }
 SUPPORTED_RELEASE_CUDA = {(13, 0)}
 SUPPORTED_RELEASE_TARGETS = {
+    ("sm86", (13, 0)),
     ("sm120", (13, 0)),
     ("sm89", (13, 0)),
 }
@@ -367,7 +370,7 @@ def main(argv: list[str] | None = None) -> int:
     architecture = SUPPORTED_ARCHITECTURES.get(capability)
     if architecture is None:
         raise RuntimeError(
-            f"this ComfyUI package supports SM89 and SM120, found "
+            f"this ComfyUI package supports SM86, SM89, and SM120, found "
             f"SM{capability[0]}{capability[1]}"
         )
     if (architecture, cuda_version) not in SUPPORTED_RELEASE_TARGETS:

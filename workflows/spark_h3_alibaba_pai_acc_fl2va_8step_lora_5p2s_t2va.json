@@ -450,10 +450,10 @@
           "link": 19
         },
         {
-          "name": "enabled",
-          "type": "BOOLEAN",
+          "name": "mode",
+          "type": "COMBO",
           "widget": {
-            "name": "enabled"
+            "name": "mode"
           },
           "link": null
         },
@@ -468,26 +468,26 @@
         {
           "name": "warmup_mode",
           "type": "COMBO",
+          "link": null,
           "widget": {
             "name": "warmup_mode"
-          },
-          "link": null
+          }
         },
         {
           "name": "warmup_ratio",
           "type": "FLOAT",
+          "link": null,
           "widget": {
             "name": "warmup_ratio"
-          },
-          "link": null
+          }
         },
         {
           "name": "warmup_steps",
           "type": "INT",
+          "link": null,
           "widget": {
             "name": "warmup_steps"
-          },
-          "link": null
+          }
         },
         {
           "name": "topk_mode",
@@ -538,6 +538,14 @@
           "link": null
         },
         {
+          "name": "dense_backend",
+          "type": "COMBO",
+          "widget": {
+            "name": "dense_backend"
+          },
+          "link": null
+        },
+        {
           "name": "tail_granularity",
           "type": "COMBO",
           "shape": 7,
@@ -572,10 +580,10 @@
         "ver": "0.1.0"
       },
       "widgets_values": [
-        true,
+        "fidelity",
         8,
         "warmup_ratio",
-        0.25,
+        0.2,
         2,
         "topk_ratio",
         0.2,
@@ -583,14 +591,15 @@
         0,
         12288,
         true,
+        "inherit",
         "query",
         "q_reuse_k"
       ],
       "widgets_values_named": {
-        "enabled": true,
+        "mode": "fidelity",
         "steps": 8,
         "warmup_mode": "warmup_ratio",
-        "warmup_ratio": 0.25,
+        "warmup_ratio": 0.2,
         "warmup_steps": 2,
         "topk_mode": "topk_ratio",
         "topk_ratio": 0.2,
@@ -598,6 +607,7 @@
         "dense_layers": 0,
         "min_tokens": 12288,
         "strict": true,
+        "dense_backend": "inherit",
         "tail_granularity": "query",
         "reblock_layout": "q_reuse_k"
       }

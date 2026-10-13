@@ -6,9 +6,9 @@
 </p>
 
 为 ComfyUI 原生 MiniMax-H3 提供 **MiniMax H3 Spark Attention
-(SM89)** 与 **MiniMax H3 Spark Attention (SM120)** 节点。将对应节点接在
+(SM86)**、**MiniMax H3 Spark Attention (SM89)** 与 **MiniMax H3 Spark Attention (SM120)** 节点。将对应节点接在
 模型加载器和 `BasicGuider` 之间；同一模型只使用一个注意力补丁。目前实现
-面向 Linux 或 Windows x86_64、NVIDIA SM89（GeForce RTX 40 系）或 SM120（GeForce RTX 50 系及
+面向 Linux 或 Windows x86_64、NVIDIA SM86（GeForce RTX 30 系）、SM89（GeForce RTX 40 系）或 SM120（GeForce RTX 50 系及
 RTX PRO 5000/6000 Blackwell）和 CUDA BF16。
 
 ## 安装
@@ -38,6 +38,43 @@ LightX2V 和 Larryvrh 工作流会继续随独立 ZIP 提供，但它们的额�
 Larryvrh 与 DMAD 示例使用 `topk_ratio=0.2`；LBH 示例为对齐 Diffusers
 `h3_lbh` 路径使用 `topk_ratio=0.1`。Spark 节点参数见
 [中文说明](../docs/comfyui_spark_node_parameters.md)。
+
+Spark 节点最前面的 `mode` 按 `fidelity / speed / custom / dense` 排列。
+`fidelity`（默认）填入 20% dense 预热，`speed` 填入
+`warmup_mode=warmup_ratio, warmup_ratio=0`，`custom` 使用手动 warmup 配置，
+`dense` 原样输出未打补丁的模型。原 `enabled` 开关被移除，但 `warmup_mode`、
+`warmup_ratio`、`warmup_steps` 都保留。手动修改当前生效的 warmup 参数使其
+不符合预设时，mode 自动变为 `custom`；修改未生效的参数不会触发切换。
+切换到 `dense` 也不会清空 warmup 值，便于之后切回 Spark。
+从其他 mode 切换到 `fidelity` 时，会把未连接成外部输入的 warmup mode 和比例
+重新写为 `warmup_ratio` 和 `0.2`。`fidelity` 下还会显示一个不参与序列化的提醒
+按钮；双采工作流的高分辨率二阶段建议点击它切换到 `speed`。
+
+`dense_backend` 控制 dense 预热、固定 dense 层、短序列和非严格模式回退。
+默认 `inherit` 不强制覆盖，沿用模型或 ComfyUI 当前的注意力后端；也可以选择
+`kitchen`、`sage` 或 `sdpa`，只对这些 dense 调用强制使用对应的已注册后端。该切换发生在 Python
+分发层，不需要重新编译各架构的 Spark wheel；`sage` 需要安装 SageAttention，
+`kitchen` 需要当前 comfy-kitchen 提供 INT8 attention。
+当保持 `inherit` 且该参数未连接外部输入时，节点会显示一个不参与序列化的提示按钮：
+“warmup 阶段现可使用 Kitchen INT8 加速 → 切换到 kitchen”。点击即可应用 kitchen，
+默认值仍保持 `inherit`。
+
+### KJNodes 低显存节点
+
+Spark 可与 ComfyUI-KJNodes 的 `MiniMax H3 Low VRAM Attention` 和
+`MiniMax H3 Chunk FeedForward` 组合，推荐且受支持的 MODEL 连接顺序是：
+
+```text
+模型加载器 → MiniMax H3 Low VRAM Attention → MiniMax H3 Chunk FeedForward
+          → MiniMax H3 Spark Attention → BasicGuider
+```
+
+必须把 Low VRAM Attention 放在 Spark 前面：Spark 会在安装补丁时检测它的
+`sol_take_forward` 协作标记，并选择独立的 head-chunk 兼容路径。不连接该节点时
+仍安装原有 Spark block patch，没有每层运行时兼容判断。Chunk FeedForward 只分块
+执行 MLP，与 attention patch 相互独立。两种适配均复用现有 Spark CUDA 接口，
+不需要重新编译 SM86、SM89 或 SM120 wheel。更多分块通常降低峰值显存，但会增加
+kernel 调用次数和耗时。
 
 Larryvrh 原始权重需使用 `tools/convert_larryvrh_lora_comfyui.py` 转换。转换会保留
 208 个主干 LoRA，并将 51 个 AdaLN 更新投影到 pruned 模型的 8 维时间曲线；之后
