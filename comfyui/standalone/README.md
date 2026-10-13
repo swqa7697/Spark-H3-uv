@@ -3,8 +3,8 @@
 Independent ComfyUI custom nodes for running Spark block-sparse attention with
 ComfyUI's native MiniMax-H3 model.
 
-Spark-H3 accelerates long MiniMax-H3 video generation by grouping similar
-tokens and preserving the contribution of tail tokens during sparse attention.
+Spark-H3 accelerates MiniMax-H3 video generation by grouping similar
+tokens and correcting tail tokens through reweighting during sparse attention.
 It provides `fidelity`, `speed`, `custom`, and `dense` modes, supports KJNodes
 low-VRAM workflows, and lets dense warmup steps use the inherited, Kitchen,
 Sage, or PyTorch SDPA attention backend.
@@ -21,11 +21,6 @@ LoRA workflow at 1344×768, 345 frames, and 24 FPS. It used
 
 Additional Linux tests on RTX 3090 and RTX PRO 6000 Blackwell showed slightly
 higher speedup ratios with ComfyUI 0.39.2, which is the recommended release.
-
-The Comfy Registry package includes all supported Linux and Windows wheels. Its
-installer selects the matching operating system, GPU architecture, and
-ComfyUI backend locally, so installation does not need to fetch a wheel from
-GitHub.
 
 ## Supported configuration
 

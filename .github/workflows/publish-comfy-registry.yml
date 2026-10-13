@@ -2,6 +2,12 @@ name: Publish Comfy Registry package
 
 on:
   workflow_dispatch:
+    inputs:
+      replace_existing:
+        description: Replace the existing Registry version after validation
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -106,6 +112,37 @@ jobs:
       - name: Validate Registry metadata and contents
         working-directory: dist/registry/ComfyUI-Spark-H3
         run: comfy node validate
+
+      - name: Remove the existing version after successful validation
+        if: ${{ inputs.replace_existing }}
+        env:
+          REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from urllib.parse import quote
+          from urllib.request import Request, urlopen
+
+          version_url = "https://api.comfy.org/nodes/comfyui-spark-h3/versions/0.1.3"
+          with urlopen(version_url, timeout=30) as response:
+              version_id = json.load(response)["id"]
+          delete_url = (
+              "https://api.comfy.org/publishers/zechengtang/nodes/"
+              f"comfyui-spark-h3/versions/{quote(version_id)}"
+          )
+          request = Request(
+              delete_url,
+              method="DELETE",
+              headers={
+                  "Authorization": f"Bearer {os.environ['REGISTRY_ACCESS_TOKEN']}"
+              },
+          )
+          with urlopen(request, timeout=30) as response:
+              if response.status != 204:
+                  raise RuntimeError(f"unexpected delete response: {response.status}")
+          print("Removed the existing Registry version 0.1.3")
+          PY
 
       - name: Publish version 0.1.3
         working-directory: dist/registry/ComfyUI-Spark-H3
