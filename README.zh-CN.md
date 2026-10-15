@@ -29,6 +29,10 @@
 
 </div>
 
+> **ComfyUI v0.1.4a0 预发布：** 新增 ComfyUI 0.40.x 支持，并为带视频条件的
+> Ref2VA 提供 `sparse_scope=joint-video`。
+> **[查看发布说明并下载](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4a0)**
+
 > 👉 [Ref2VA 任务加速解决方案](docs/sparse_scope.md#ref2va-任务加速解决方案)
 
 ---
@@ -89,9 +93,9 @@ with install_h3_spark_attn(
 
 ## 🧩 ComfyUI 安装
 
-Spark-H3 为 Linux 和 Windows x86_64 上的 ComfyUI 0.38.x 与 0.39.x 提供独立节点。发布包支持 GeForce RTX 30 系列（SM86）、GeForce RTX 40 系列（SM89），以及 GeForce RTX 50 系列和 RTX PRO 5000/6000 Blackwell（SM120）。请选择与操作系统和 GPU 架构匹配的 CUDA 13.0 安装包。发布包不包含 ComfyUI 和模型权重。
+Spark-H3 为 Linux 和 Windows x86_64 上的 ComfyUI 0.38.x、0.39.x 与 0.40.x 提供独立节点。发布包支持 GeForce RTX 30 系列（SM86）、GeForce RTX 40 系列（SM89），以及 GeForce RTX 50 系列和 RTX PRO 5000/6000 Blackwell（SM120）。请选择与操作系统和 GPU 架构匹配的 CUDA 13.0 安装包。发布包不包含 ComfyUI 和模型权重。
 
-下载、安装方法及示例工作流请参阅 [ComfyUI 指南](comfyui/README.md) 或 [中文安装指南](comfyui/INSTALL.zh-CN.md)。
+可直接下载 [v0.1.4a0 预发布版本](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4a0)；安装方法及示例工作流请参阅 [ComfyUI 指南](comfyui/README.md) 或 [中文安装指南](comfyui/INSTALL.zh-CN.md)。
 
 ## 步数约定
 
