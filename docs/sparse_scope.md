@@ -1,0 +1,157 @@
+# MiniMax H3 sparse scope conventions
+
+本文统一描述 MiniMax H3 的 FL2VA 与 Ref2VA 稀疏注意力范围。这里的范围是
+加速方法的约定，不是 H3 dense attention 自带的 mask。
+
+## 记号
+
+箭头左侧是 query，右侧是 key/value：
+
+```text
+Q -> KV
+```
+
+本文使用以下 token 角色。为避免引入任务实现细节，FL2VA 的首尾帧与 Ref2VA 的
+参考素材统一称为 reference：
+
+| 记号 | 含义 |
+|---|---|
+| `T` | text 与 VLM context |
+| `V` | reference visual token，包括 FL2VA 首尾帧以及 Ref2VA 参考图和参考视频 |
+| `A` | reference audio token，用于 Ref2VA 参考音频 |
+| `V_t` | target-video token |
+| `A_t` | target-audio token |
+
+本文还区分两个容易混淆的概念：
+
+- **dense query**：该 query 行计算所有有效 K/V。
+- **exact K/V**：这些 K/V 对每个 sparse query 都无条件保留；这不表示对应 query
+  行本身一定 dense。
+
+## FL2VA：target-video-only
+
+FL2VA 常用约定是只压缩目标视频内部的注意力：
+
+```text
+V_t -> V_t sparse
+```
+
+对应关系为：
+
+| Query \ K/V | `T + V + A_t` | `V_t` |
+|---|---:|---:|
+| `T + V + A_t` | dense | dense |
+| `V_t` | exact | sparse |
+
+也就是说：
+
+- 文本、reference visual 和目标音频保持 dense query。
+- 它们同时作为 global/exact K/V，对所有目标视频 query 可见。
+- 只有 `V_t -> V_t` 使用 Top-K、窗口或其他稀疏/近似分支。
+
+FastH3、VDN 以及 Spark 的 `sparse_scope=target-video` 都属于这一范围约定，
+但具体稀疏算子不同。VDN 还会把目标视频的首尾 latent frame 当作 exact query 和
+exact K/V；这属于 `V_t` 内部的 anchor 例外，不改变 target-video-only 的总体定义。
+
+## Ref2VA
+
+Ref2VA 没有唯一通用的稀疏范围。当前常见的约定至少有以下三类。
+
+### 1. Target-video-only
+
+可以直接沿用 FL2VA 约定：
+
+```text
+V_t -> V_t sparse
+```
+
+此时所有 reference visual `V` 都保持 dense query 和 exact K/V。优点是参考信息不会被压缩；
+缺点是长参考视频的计算量不会被稀疏化。
+
+Spark 的 `sparse_scope=target-video` 使用该约定。
+
+### 2. Veda R2VA：visual-to-visual dual-pool
+
+Veda R2VA 将 reference visual 与目标视频共同放入稀疏视觉象限：
+
+```text
+(V + V_t) -> (V + V_t) sparse
+```
+
+这里四个方向都稀疏：
+
+```text
+V   -> V
+V   -> V_t
+V_t -> V
+V_t -> V_t
+```
+
+但 K/V 不是放在一个共享 Top-K 中竞争。每个视觉 query 分别从两个 K/V 池选择：
+
+```text
+(V + V_t) -> [V]K_V + [V_t]K_Vt
+```
+
+当前发布的 H3 R2VA Preview 使用固定 tile 预算：
+
+```text
+(V + V_t) -> [V]32 + [V_t]32
+```
+
+即每个视觉 query tile、每个 head 最多选择 32 个 reference visual key tiles 和 32 个
+target-video key tiles。这里是 32 个 **tile**，不是 32 个 token；每个 tile 有
+128 个 token。两个池的额度相互独立，不从一个总预算中按 token 数量瓜分，因此
+`V` 与 `V_t` 的实际保留率可以不同。
+
+`T + A + A_t` 在 Veda 中是 global：其 query 行 dense，其 K/V 对所有视觉 query
+无条件可见。
+
+### 3. comfy-kitchen Sol：sparse query + exact prefix K/V
+
+当前 ComfyUI generic Ref2VA profile 的 Sol 范围可写成：
+
+```text
+Q_sparse = All - A_t
+KV_exact = All - V_t
+```
+
+忽略跨角色边界块后，这表示：
+
+- `A_t` 是 dense query。
+- `T + V + A + V_t` 的 query 行走 Sol sparse/approximate 路径。
+- `T + V + A + A_t` 全部作为 exact K/V 保留。
+- `V_t` 是被路由或近似的 K/V 区域。
+
+因此，“reference token 是 exact K/V”不等于“reference token 是 dense query”。Sol 的文本、
+参考视觉和参考音频 query 可以走稀疏路径，同时这些角色对应的 K/V 仍被所有 sparse
+query 精确保留。
+
+实际 kernel 以 block 为单位；跨越角色边界的 block 以及实现强制保留的 block 会形成
+少量 exact 例外。
+
+## Spark `sparse_scope` 与上述约定
+
+当前 Spark 节点提供两个范围值：
+
+| `sparse_scope` | 稀疏域 | 保持 exact 的 reference visual |
+|---|---|---|
+| `target-video` | 仅 `V_t` | 所有 `V` |
+| `joint-video` | 多时间位置的参考视频视觉 token 与 `V_t` 组成一个共同稀疏域 | 静态参考图以及其他未纳入的 `V` |
+
+`joint-video` 表示这些 token 进入同一个 Spark 稀疏域，不表示采用 Veda 的双池预算。
+当前 Spark 会把被选中的参考视频与目标视频组成一个稀疏视觉前缀；Veda 则明确使用
+`[V]K_V + [V_t]K_Vt` 两个独立 K/V 池。没有多时间位置参考视频时，Spark 的
+`joint-video` 自动退化为与 `target-video` 相同的路径。
+
+## 对照摘要
+
+| 约定 | Sparse query | Sparse/routed K/V | Dense query | Exact/global K/V |
+|---|---|---|---|---|
+| FL2VA / target-video-only | `V_t` | `V_t` | `T + V + A_t` | `T + V + A_t` |
+| Veda R2VA | `V + V_t` | `V`、`V_t` 两个独立池 | `T + A + A_t` | `T + A + A_t` |
+| Sol generic Ref2VA | `T + V + A + V_t` | `V_t` | `A_t` | `T + V + A + A_t` |
+
+阅读或新增配置时，应分别说明 query 范围、exact K/V 范围以及每个稀疏 K/V 池的预算，
+不要只写“90% sparse”：同一个百分比无法说明哪些 token 角色参与稀疏，也无法表达
+Veda 的分池预算或 Sol 的 exact K/V。
