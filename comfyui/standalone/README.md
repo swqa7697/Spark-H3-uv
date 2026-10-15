@@ -20,18 +20,19 @@ LoRA workflow at 1344×768, 345 frames, and 24 FPS. It used
 | RTX PRO 6000 Blackwell (SM120) | **2.05×** | **3.15×** |
 
 Additional Linux tests on RTX 3090 and RTX PRO 6000 Blackwell showed slightly
-higher speedup ratios with ComfyUI 0.39.2, which is the recommended release.
+higher speedup ratios with ComfyUI 0.39.2. ComfyUI 0.40.x uses the same
+comfy-kitchen 0.2.37 backend and is also supported.
 
 ## Supported configuration
 
-- ComfyUI 0.38.x or 0.39.x with native MiniMax-H3 support
+- ComfyUI 0.38.x, 0.39.x, or 0.40.x with native MiniMax-H3 support
 - NVIDIA SM86 (GeForce RTX 30 series), SM89 (GeForce RTX 40 series), or SM120 GPU (GeForce RTX 50 series and
   RTX PRO 5000/6000 Blackwell)
 - PyTorch CUDA 13.0 and CUDA BF16 execution
 - Linux x86_64 or Windows x86_64; the Windows CUDA 13.0 builds have been
   validated on their target platforms
 
-**Supported ComfyUI releases: 0.38.x and 0.39.x.** The installer selects the
+**Supported ComfyUI releases: 0.38.x, 0.39.x, and 0.40.x.** The installer selects the
 Spark backend matching the `comfy-kitchen` dependency in the ComfyUI environment.
 Install or update dependencies with that ComfyUI release's `requirements.txt`.
 
@@ -60,7 +61,7 @@ present in ComfyUI:
 | Installed ComfyUI version | Corresponding comfy-kitchen backend version |
 | --- | --- |
 | ComfyUI 0.38.x | `comfy-kitchen 0.2.36+spark.h3.<architecture>.<CUDA>.1` |
-| ComfyUI 0.39.x | `comfy-kitchen 0.2.37+spark.h3.<architecture>.<CUDA>.1` |
+| ComfyUI 0.39.x or 0.40.x | `comfy-kitchen 0.2.37+spark.h3.<architecture>.<CUDA>.1` |
 
 SM86 wheels use the `+spark.h3.sm86.cu130.1` local version and compile for
 CUDA architecture `86`. SM89 wheels use the `+spark.h3.sm89.cu130.1` local version and contain code
@@ -117,7 +118,7 @@ Automatic selection is recommended. For troubleshooting, specify the expected
 # ComfyUI 0.38.x
 /path/to/ComfyUI/.venv/bin/python ComfyUI-Spark-H3/install.py --kitchen-base 0.2.36
 
-# ComfyUI 0.39.x
+# ComfyUI 0.39.x or 0.40.x
 /path/to/ComfyUI/.venv/bin/python ComfyUI-Spark-H3/install.py --kitchen-base 0.2.37
 ```
 
@@ -125,7 +126,7 @@ Restart ComfyUI after installation. ComfyUI Manager can also install the node
 after registry publication, but Manager is optional and is not bundled by this
 package.
 
-Both supported ComfyUI lines retain ComfyUI's default `cudaMallocAsync`
+All supported ComfyUI lines retain ComfyUI's default `cudaMallocAsync`
 allocator; no `--disable-cuda-malloc` launch flag is required. The node keeps
 only its allocation-heavy reblock planner out of a private PyTorch CUDA graph
 to avoid captured-allocation lifetime failures. Spark's attention CUDA kernel
@@ -134,7 +135,7 @@ still runs normally.
 ## Repository independence and offline boundary
 
 Each release ZIP contains the architecture/CUDA wheel combination named in the
-table above, with wheels compatible with ComfyUI 0.38.x and 0.39.x. On Linux
+table above, with wheels compatible with ComfyUI 0.38.x, 0.39.x, and 0.40.x. On Linux
 or Windows x86_64 with CPython 3.12+ it does not clone or import code from the MiniMax-H3, Spark-H3,
 Diffusers, `comfy-aimdo`, or `comfy-kitchen` repositories. It reuses the
 PyTorch, Triton, CUDA integration, and native MiniMax-H3 implementation already
@@ -161,6 +162,15 @@ python install.py --wheel /path/to/comfy_kitchen-0.2.37+spark.h3.sm120.cu130.1-*
 
 Spark defaults to legacy midpoint directions, FP32 global anchors, exact
 key-block budgets, query-granularity tails, and `q_reuse_k` reblocking.
+
+`sparse_scope=target-video` preserves the original target-only layout and direct-output
+path. For Ref2VA, `sparse_scope=joint-video` places multi-timestep `ref_img`
+rows and target-video rows in one shared sparse domain with joint Reblock,
+Top-K, and Reweight, while text and audio remain exact. If no visual reference
+is present, it automatically uses the identical target-only path. Prefer
+`topk_ratio` for `joint-video`; a fixed `topk_blocks` value covers a smaller
+fraction after reference blocks are added. An unlinked target scope displays a
+non-serialized one-click reminder for video-conditioned Ref2VA workflows.
 
 ## Example workflows
 

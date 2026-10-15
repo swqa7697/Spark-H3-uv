@@ -13,6 +13,7 @@ const MODE_DEFAULTS = {
     warmup_steps: 4,
     topk_mode: "topk_ratio",
     topk_blocks: 228,
+    sparse_scope: "target-video",
 };
 
 const MODE_PRESETS = {
@@ -68,7 +69,7 @@ function installTwoStageHint(node) {
     if (typeof node.addWidget !== "function" || node._sparkTwoStageHint) return;
     const hint = node.addWidget(
         "button",
-        "双采工作流的高分辨率二阶段：关闭 dense warmup → 切换到 speed",
+        "双采高分辨率二阶段：建议使用 mode=speed → 一键切换",
         null,
         () => {
             const mode = node.widgets?.find((widget) => widget.name === "mode");
@@ -92,7 +93,7 @@ function installDenseBackendHint(node) {
     if (!backend || typeof node.addWidget !== "function" || node._sparkDenseBackendHint) return;
     const hint = node.addWidget(
         "button",
-        "warmup 阶段现可使用 Kitchen INT8 加速 → 切换到 kitchen",
+        "Dense warmup 加速：可使用 dense_backend=kitchen → 一键切换",
         null,
         () => {
             if (modeIsLinked(node, "dense_backend")) return;
@@ -108,6 +109,29 @@ function installDenseBackendHint(node) {
     hint.options ??= {};
     hint.options.serialize = false;
     node._sparkDenseBackendHint = hint;
+}
+
+function installRef2VAHint(node) {
+    const scope = node.widgets?.find((widget) => widget.name === "sparse_scope");
+    if (!scope || typeof node.addWidget !== "function" || node._sparkRef2VAHint) return;
+    const hint = node.addWidget(
+        "button",
+        "带视频条件的 Ref2VA：建议使用 sparse_scope=joint-video → 一键切换",
+        null,
+        () => {
+            if (modeIsLinked(node, "sparse_scope")) return;
+            const previousValue = scope.value;
+            scope.value = "joint-video";
+            scope.callback?.(scope.value);
+            node.onWidgetChanged?.("sparse_scope", scope.value, previousValue, scope);
+            syncModeWidgets(node);
+        },
+        { serialize: false },
+    );
+    hint.serialize = false;
+    hint.options ??= {};
+    hint.options.serialize = false;
+    node._sparkRef2VAHint = hint;
 }
 
 function syncModeWidgets(node) {
@@ -128,12 +152,22 @@ function syncModeWidgets(node) {
         node._sparkDenseBackendHint,
         !modeIsLinked(node, "dense_backend") && widgets.get("dense_backend")?.value === "inherit",
     );
+    setVisible(
+        node._sparkRef2VAHint,
+        !modeIsLinked(node, "sparse_scope") && widgets.get("sparse_scope")?.value === "target-video",
+    );
 
     if (typeof node.computeSize === "function" && typeof node.setSize === "function") {
         const [width, height] = node.computeSize();
         node.setSize([Math.max(node.size[0], width), height]);
     }
     node.setDirtyCanvas?.(true, true);
+}
+
+function migrateSparseScope(node) {
+    const scope = node.widgets?.find((widget) => widget.name === "sparse_scope");
+    if (scope?.value === "target") scope.value = "target-video";
+    if (scope?.value === "ref+target") scope.value = "joint-video";
 }
 
 app.registerExtension({
@@ -145,8 +179,9 @@ app.registerExtension({
         node._sparkModeWidgetsInstalled = true;
         installTwoStageHint(node);
         installDenseBackendHint(node);
+        installRef2VAHint(node);
 
-        for (const name of ["mode", "topk_mode", "warmup_mode", "warmup_ratio", "warmup_steps", "dense_backend"]) {
+        for (const name of ["mode", "topk_mode", "warmup_mode", "warmup_ratio", "warmup_steps", "dense_backend", "sparse_scope"]) {
             const widget = node.widgets?.find((item) => item.name === name);
             if (!widget) continue;
             const previousCallback = widget.callback;
@@ -202,6 +237,7 @@ app.registerExtension({
                 }
                 if (mode?.value === "warmup_percent") mode.value = "warmup_ratio";
             }
+            migrateSparseScope(this);
             markCustomIfNeeded(this, false);
             syncModeWidgets(this);
             return result;
@@ -211,6 +247,7 @@ app.registerExtension({
     loadedGraphNode(node) {
         const comfyClass = node.comfyClass ?? node.constructor?.comfyClass;
         if (SPARK_NODES.has(comfyClass)) {
+            migrateSparseScope(node);
             markCustomIfNeeded(node, false);
             syncModeWidgets(node);
         }

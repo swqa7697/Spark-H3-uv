@@ -215,6 +215,7 @@ def comfy_kitchen_spark_attention(
     # the same Spark kernel. No redundant external dense-SDPA overwrite.
     sample = _profile_begin(controller, "sparse_attention")
     topk_ratio = _topk_ratio(controller, layout)
+    direct_output = controller.direct_output and layout.video_start is not None
     output = spark_attn(
         q,
         k,
@@ -235,10 +236,10 @@ def comfy_kitchen_spark_attention(
         query_inverse=query_inverse,
         force_local_blocks=controller.config.force_local_blocks,
         reweight=not controller.topk_only,
-        video_start=(layout.video_start or 0) if controller.direct_output else 0,
+        video_start=layout.video_start if direct_output else 0,
     )
     _profile_end(controller, sample)
     controller.backend = "comfy-kitchen-spark-global"
-    controller.output_in_original_layout = controller.direct_output
+    controller.output_in_original_layout = direct_output
     controller.counts["comfy_kitchen_calls"] += 1
     return output

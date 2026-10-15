@@ -39,8 +39,9 @@ def test_standalone_package_is_small_complete_and_importable(tmp_path):
     assert 'speed: { warmup_mode: "warmup_ratio", warmup_ratio: 0.0 }' in mode_widget_source
     assert 'fidelity: { warmup_mode: "warmup_ratio", warmup_ratio: 0.2 }' in mode_widget_source
     assert 'mode.value = "custom"' in mode_widget_source
-    assert '"双采工作流的高分辨率二阶段：关闭 dense warmup → 切换到 speed"' in mode_widget_source
-    assert '"warmup 阶段现可使用 Kitchen INT8 加速 → 切换到 kitchen"' in mode_widget_source
+    assert '"双采高分辨率二阶段：建议使用 mode=speed → 一键切换"' in mode_widget_source
+    assert '"Dense warmup 加速：可使用 dense_backend=kitchen → 一键切换"' in mode_widget_source
+    assert '"带视频条件的 Ref2VA：建议使用 sparse_scope=joint-video → 一键切换"' in mode_widget_source
     assert "{ serialize: false }" in mode_widget_source
     assert not (package / "comfyui_ref2va.py").exists()
     assert (package / "h3_sparse_attention/landmark_tree_v2.py").is_file()
@@ -66,7 +67,7 @@ def test_standalone_package_is_small_complete_and_importable(tmp_path):
     assert "Operating System :: OS Independent" in metadata["project"]["classifiers"]
     assert "Operating System :: POSIX :: Linux" not in metadata["project"]["classifiers"]
     assert metadata["tool"]["comfy"]["PublisherId"] == "test-publisher"
-    assert metadata["tool"]["comfy"]["requires-comfyui"] == ">=0.38.0,<0.40.0"
+    assert metadata["tool"]["comfy"]["requires-comfyui"] == ">=0.38.0,<0.41.0"
 
     assert {
         "spark_h3_vdn8_14p4s_t2va.json",
@@ -898,8 +899,9 @@ def test_installer_resolves_supported_installed_base(monkeypatch):
     assert installer._resolve_kitchen_base() == "0.2.37"
 
     monkeypatch.setattr(installer.metadata, "version", lambda _name: "0.2.35")
-    with pytest.raises(RuntimeError, match="ComfyUI 0.38.x"):
+    with pytest.raises(RuntimeError, match="ComfyUI 0.38.x") as error:
         installer._resolve_kitchen_base()
+    assert "ComfyUI 0.39.x/0.40.x" in str(error.value)
 
 
 def test_installer_requires_opt_in_for_cu128_and_unknown_cuda(monkeypatch, capsys):

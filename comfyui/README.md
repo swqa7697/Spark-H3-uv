@@ -64,6 +64,18 @@ unlinked controls. In `fidelity`, a non-serialized reminder button offers one-cl
 switching to `speed`, as recommended for the high-resolution second pass of a
 two-pass workflow.
 
+`sparse_scope` defaults to `target-video`, which preserves the released target-only
+layout and direct-output path. Select `joint-video` for Ref2VA to place both
+multi-timestep reference-video visual rows and the generated target video in
+one shared sparse domain with joint Reblock, Top-K, and Reweight; static
+reference images, text, reference audio, and target audio remain exact. With no
+reference-video visual rows, `joint-video` automatically uses the identical
+target-only path. Prefer `topk_ratio` with `joint-video`, because a fixed
+`topk_blocks` budget represents
+a smaller fraction of the enlarged candidate set. While an unlinked
+`sparse_scope` remains `target-video`, a non-serialized reminder offers one-click
+switching to `joint-video` for Ref2VA tasks with video conditioning.
+
 `dense_backend` controls dense warmup steps, permanently dense layers, short-sequence
 execution, and non-strict fallback calls. Keep the default `inherit` to follow
 the model's or ComfyUI's configured attention backend, or select `kitchen`, `sage`, or `sdpa`

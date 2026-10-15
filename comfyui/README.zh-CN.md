@@ -14,7 +14,7 @@ RTX PRO 5000/6000 Blackwell）和 CUDA BF16。
 ## 安装
 
 请参阅 **[ComfyUI 中文安装指南](INSTALL.zh-CN.md)**。指南包含
-ComfyUI 0.38.x/0.39.x 的版本选择、ZIP 安装命令、手动指定版本和
+ComfyUI 0.38.x/0.39.x/0.40.x 的版本选择、ZIP 安装命令、手动指定版本和
 常见问题排查。
 
 ## 模型与工作流
@@ -48,7 +48,17 @@ Spark 节点最前面的 `mode` 按 `fidelity / speed / custom / dense` 排列�
 切换到 `dense` 也不会清空 warmup 值，便于之后切回 Spark。
 从其他 mode 切换到 `fidelity` 时，会把未连接成外部输入的 warmup mode 和比例
 重新写为 `warmup_ratio` 和 `0.2`。`fidelity` 下还会显示一个不参与序列化的提醒
-按钮；双采工作流的高分辨率二阶段建议点击它切换到 `speed`。
+按钮：“双采高分辨率二阶段：建议使用 mode=speed → 一键切换”。点击即可应用
+speed 预设。
+
+`sparse_scope` 默认是 `target-video`，完整保留原有 target-only 布局和 direct-output
+路径。Ref2VA 可以选择 `joint-video`，把具有多个时间位置的参考视频视觉 token 和
+生成目标视频放入同一个稀疏域，统一执行 Reblock、Top-K 和 Reweight；静态参考图、
+文本、参考音频和目标音频仍保持 exact。没有参考视频视觉 token 时，`joint-video`
+自动使用完全相同的 target-video 路径。由于 `joint-video` 会扩大候选集合，建议优先使用
+`topk_ratio`；固定 `topk_blocks` 在更大候选集合中对应的实际比例会降低。
+当未连接外部输入且仍选择 `target-video` 时，节点会显示一个不参与序列化的提醒按钮，
+显示“带视频条件的 Ref2VA：建议使用 sparse_scope=joint-video → 一键切换”；点击即可切换。
 
 `dense_backend` 控制 dense 预热、固定 dense 层、短序列和非严格模式回退。
 默认 `inherit` 不强制覆盖，沿用模型或 ComfyUI 当前的注意力后端；也可以选择
@@ -56,7 +66,7 @@ Spark 节点最前面的 `mode` 按 `fidelity / speed / custom / dense` 排列�
 分发层，不需要重新编译各架构的 Spark wheel；`sage` 需要安装 SageAttention，
 `kitchen` 需要当前 comfy-kitchen 提供 INT8 attention。
 当保持 `inherit` 且该参数未连接外部输入时，节点会显示一个不参与序列化的提示按钮：
-“warmup 阶段现可使用 Kitchen INT8 加速 → 切换到 kitchen”。点击即可应用 kitchen，
+“Dense warmup 加速：可使用 dense_backend=kitchen → 一键切换”。点击即可应用 kitchen，
 默认值仍保持 `inherit`。
 
 ### KJNodes 低显存节点

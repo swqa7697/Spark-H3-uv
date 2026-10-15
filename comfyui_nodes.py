@@ -46,6 +46,15 @@ _DENSE_ATTENTION_FUNCTIONS = {
     "kitchen": "comfy_kitchen_int8",
 }
 _SPARK_MODES = ("fidelity", "speed", "custom", "dense")
+_SPARSE_SCOPES = ("target-video", "joint-video")
+_LEGACY_SPARSE_SCOPES = {
+    "target": "target-video",
+    "ref+target": "joint-video",
+}
+
+
+def _normalize_sparse_scope(sparse_scope: str) -> str:
+    return _LEGACY_SPARSE_SCOPES.get(sparse_scope, sparse_scope)
 
 
 class _Unsupported(RuntimeError):
@@ -124,7 +133,7 @@ def _spark_mode_is_dense(mode: str) -> bool:
 def _enable_cu128_cuda_backend(target_capability: tuple[int, int]) -> bool:
     """Undo ComfyUI's blanket CU128 comfy-kitchen disable for our pinned wheel.
 
-    ComfyUI 0.38/0.39 disables the complete comfy-kitchen CUDA registry on
+    ComfyUI 0.38/0.39/0.40 disables the complete comfy-kitchen CUDA registry on
     PyTorch CUDA versions older than 13.  Spark calls its CUDA extension
     directly, but the surrounding quantized H3 projections then silently use
     the eager backend and dominate runtime.  A Spark wheel is compiled for the
@@ -182,7 +191,10 @@ def _target_video_span(layout, sequence_length: int) -> tuple[int, int]:
     return start, stop
 
 
-def _make_spark_layout(layout, sequence_length: int, device: torch.device) -> ComfyPackedLayout:
+def _make_target_spark_layout(
+    layout, sequence_length: int, device: torch.device
+) -> ComfyPackedLayout:
+    """Build the released target-only layout without changing its fast path."""
     start, stop = _target_video_span(layout, sequence_length)
     position_ids = getattr(layout, "position_ids", None)
     if not torch.is_tensor(position_ids) or position_ids.shape != (sequence_length, 3):
@@ -215,6 +227,132 @@ def _make_spark_layout(layout, sequence_length: int, device: torch.device) -> Co
     )
 
 
+def _dense_grid_order(
+    position_ids: torch.Tensor, indices: torch.Tensor
+) -> tuple[torch.Tensor, tuple[int, int, int], torch.Tensor, bool]:
+    positions = position_ids.index_select(0, indices)
+    unique_t, unique_h, unique_w = (
+        positions[:, axis].unique(sorted=True) for axis in range(3)
+    )
+    grid = (unique_t.numel(), unique_h.numel(), unique_w.numel())
+    key = (
+        torch.searchsorted(unique_t, positions[:, 0].contiguous())
+        * grid[1]
+        * grid[2]
+        + torch.searchsorted(unique_h, positions[:, 1].contiguous()) * grid[2]
+        + torch.searchsorted(unique_w, positions[:, 2].contiguous())
+    )
+    order = key.argsort()
+    expected = torch.arange(math.prod(grid), device=indices.device)
+    is_dense = key.numel() == expected.numel() and torch.equal(
+        key.index_select(0, order), expected
+    )
+    return positions, grid, order, is_dense
+
+
+def _make_ref_target_spark_layout(
+    layout, sequence_length: int, device: torch.device
+) -> ComfyPackedLayout:
+    """Pack reference-video and target-video rows into Spark's sparse prefix.
+
+    ComfyUI historically labels both static-image and video-reference visual
+    spans as ``ref_img``. A static image has one temporal coordinate, whereas
+    a useful video reference has multiple temporal coordinates. Keep the
+    former exact and only add the latter to Spark's sparse visual prefix.
+    """
+    segments = tuple(getattr(layout, "segments", ()))
+    if not segments:
+        raise _Incompatible("minimax_h3_layout does not publish a segment table")
+    normalized = []
+    for index, segment in enumerate(segments):
+        if not isinstance(segment, (tuple, list)) or len(segment) != 3:
+            raise _Incompatible("minimax_h3_layout has an invalid segment table")
+        start, stop, kind = int(segment[0]), int(segment[1]), str(segment[2])
+        if start < 0 or stop <= start or (index and start != normalized[-1][1]):
+            raise _Incompatible("minimax_h3_layout has a non-contiguous segment table")
+        normalized.append((start, stop, kind))
+    if normalized[0][0] != 0 or normalized[-1][1] != sequence_length:
+        raise _Incompatible("minimax_h3_layout segment table does not cover the sequence")
+
+    target_segments = [segment for segment in normalized if segment[2] == "video"]
+    if len(target_segments) != 1:
+        raise _Incompatible("minimax_h3_layout does not contain exactly one target video segment")
+    position_ids = getattr(layout, "position_ids", None)
+    if not torch.is_tensor(position_ids) or position_ids.shape != (sequence_length, 3):
+        raise _Incompatible("minimax_h3_layout.position_ids has an unexpected shape")
+    position_ids = position_ids.to(device=device)
+
+    reference_segments = [segment for segment in normalized if segment[2] == "ref_img"]
+    reference_video_segments = [
+        segment
+        for segment in reference_segments
+        if position_ids[segment[0]:segment[1], 0].unique().numel() > 1
+    ]
+    if not reference_video_segments:
+        # With only static reference images (or no visual reference),
+        # joint-video must remain identical to target-only, including the
+        # direct-output optimization.
+        return _make_target_spark_layout(layout, sequence_length, device)
+
+    sparse_segments = (*reference_video_segments, target_segments[0])
+    ordered_segments = []
+    ordered_positions = []
+    for start, stop, kind in sparse_segments:
+        indices = torch.arange(start, stop, device=device, dtype=torch.long)
+        positions, grid, order, is_dense = _dense_grid_order(position_ids, indices)
+        if not is_dense:
+            raise _Incompatible(
+                f"{kind} rows do not form a dense grid: grid={grid}, rows={stop - start}"
+            )
+        ordered_segments.append(indices.index_select(0, order))
+        ordered_positions.append(positions.index_select(0, order))
+
+    sparse = torch.cat(ordered_segments)
+    sparse_positions = torch.cat(ordered_positions)
+    _, grid, order, is_dense = _dense_grid_order(position_ids, sparse)
+    if is_dense:
+        sparse = sparse.index_select(0, order)
+        sparse_positions = position_ids.index_select(0, sparse)
+    else:
+        # Different reference/target resolutions cannot be expressed as one
+        # Cartesian grid. The reblock planner accepts a flat composite grid.
+        grid = (1, 1, sparse.numel())
+
+    selected = torch.zeros(sequence_length, device=device, dtype=torch.bool)
+    selected[sparse] = True
+    exact = torch.nonzero(~selected, as_tuple=False).flatten()
+    permutation = torch.cat((sparse, exact))
+    inverse = torch.empty_like(permutation)
+    inverse[permutation] = torch.arange(sequence_length, device=device)
+    return ComfyPackedLayout(
+        permutation=permutation,
+        inverse_permutation=inverse,
+        grid=grid,
+        video_tokens=sparse.numel(),
+        sequence_length=sequence_length,
+        video_positions=sparse_positions,
+        # Reference and target rows are not one contiguous span in ComfyUI's
+        # native order, so the single-span direct-output optimization is unsafe.
+        video_start=None,
+    )
+
+
+def _make_spark_layout(
+    layout,
+    sequence_length: int,
+    device: torch.device,
+    sparse_scope: str = "target-video",
+) -> ComfyPackedLayout:
+    sparse_scope = _normalize_sparse_scope(sparse_scope)
+    if sparse_scope == "target-video":
+        return _make_target_spark_layout(layout, sequence_length, device)
+    if sparse_scope == "joint-video":
+        return _make_ref_target_spark_layout(layout, sequence_length, device)
+    raise ValueError(
+        f"sparse_scope must be one of {', '.join(_SPARSE_SCOPES)}; got {sparse_scope!r}"
+    )
+
+
 @dataclass
 class _RunState:
     steps: int
@@ -223,8 +361,11 @@ class _RunState:
     target_capability: tuple[int, int] = (12, 0)
     warmup_mode: str = "warmup_ratio"
     warmup_steps: int = 4
+    sparse_scope: str = "target-video"
     previous_sigma: float | None = None
-    layout_cache: dict[tuple[int, int, str], ComfyPackedLayout] = field(default_factory=dict)
+    layout_cache: dict[tuple[int, int, str, str], ComfyPackedLayout] = field(
+        default_factory=dict
+    )
 
     @classmethod
     def create(
@@ -242,6 +383,7 @@ class _RunState:
         warmup_mode: str = "warmup_ratio",
         warmup_steps: int = 4,
         reblock_layout: str = "q_reuse_k",
+        sparse_scope: str = "target-video",
         target_capability: tuple[int, int] = (12, 0),
     ):
         if warmup_mode not in ("warmup_ratio", "warmup_steps"):
@@ -250,6 +392,11 @@ class _RunState:
             raise ValueError("warmup_ratio must lie in [0, 1]")
         if type(warmup_steps) is not int or warmup_steps < 0:
             raise ValueError("warmup_steps must be a nonnegative integer")
+        sparse_scope = _normalize_sparse_scope(sparse_scope)
+        if sparse_scope not in _SPARSE_SCOPES:
+            raise ValueError(
+                f"sparse_scope must be one of {', '.join(_SPARSE_SCOPES)}"
+            )
         layout_reuse = {
             "q_reuse_k": "q_from_k",
             "q_from_k": "q_from_k",
@@ -291,6 +438,7 @@ class _RunState:
             steps, warmup_ratio, ComfySparkController(config),
             target_capability=target_capability,
             warmup_mode=warmup_mode, warmup_steps=warmup_steps,
+            sparse_scope=sparse_scope,
         )
         state.controller.topk_only = ablation_mode == "topk_only"
         # The exact kernel can scatter video-first rows directly into H3's
@@ -329,10 +477,12 @@ class _RunState:
         return self.controller.evaluation_index < self.warmup_evaluations
 
     def spark_layout(self, layout, sequence_length: int, device: torch.device):
-        key = (id(layout), sequence_length, str(device))
+        key = (id(layout), sequence_length, str(device), self.sparse_scope)
         cached = self.layout_cache.get(key)
         if cached is None:
-            cached = _make_spark_layout(layout, sequence_length, device)
+            cached = _make_spark_layout(
+                layout, sequence_length, device, self.sparse_scope
+            )
             self.layout_cache[key] = cached
         return cached
 
@@ -345,7 +495,7 @@ class _ActivationLog:
     def hit(self, tokens: int, video_tokens: int, capability: tuple[int, int]) -> None:
         if not self.active:
             log.info(
-                "[Spark-H3] active on SM%d%d (%d packed tokens, %d target-video tokens)",
+                "[Spark-H3] active on SM%d%d (%d packed tokens, %d sparse-video tokens)",
                 capability[0],
                 capability[1],
                 tokens,
@@ -884,6 +1034,11 @@ class MiniMaxH3SparkAttentionSM120:
                 "reblock_layout": (["q_reuse_k", "independent"],
                                    {"default": "q_reuse_k",
                                     "tooltip": "reblock 布局：q_reuse_k 只构造 K 侧布局并让 Q 复用，减少 M2、树构建和索引开销；independent 分别构造 Q/K 布局，用于兼容旧结果。"}),
+                "sparse_scope": (
+                    list(_SPARSE_SCOPES),
+                    {"default": "target-video",
+                     "tooltip": "稀疏视觉范围：target-video（默认）只稀疏目标视频；joint-video 将参考视频与目标视频放入同一个稀疏域，统一执行 Reblock、Top-K 和 Reweight。静态参考图、文本和音频仍保持 exact。"},
+                ),
             },
         }
 
@@ -921,6 +1076,7 @@ class MiniMaxH3SparkAttentionSM120:
         midpoint_direction_mode="legacy",
         reblock_layout="q_reuse_k",
         dense_backend="inherit",
+        sparse_scope="target-video",
     ):
         if _spark_mode_is_dense(str(mode)):
             return (model,)
@@ -948,6 +1104,7 @@ class MiniMaxH3SparkAttentionSM120:
             warmup_mode=str(warmup_mode),
             warmup_steps=int(warmup_steps),
             reblock_layout=str(reblock_layout),
+            sparse_scope=str(sparse_scope),
             target_capability=self.TARGET_CAPABILITY,
         )
         if kj_low_vram_forward is not None:
@@ -1007,10 +1164,11 @@ class MiniMaxH3SparkAttentionSM120:
         )
         log.info(
             "[Spark-H3] installed ComfyUI-native producer on %d H3 blocks "
-            "(profile %s, mode %s, tail %s, anchor %s, approximation %s, midpoint %s, reblock %s, Top-K %s, warmup %s, dense backend %s, dense blocks %s, KJ low-VRAM %s)",
+            "(profile %s, mode %s, sparse scope %s, tail %s, anchor %s, approximation %s, midpoint %s, reblock %s, Top-K %s, warmup %s, dense backend %s, dense blocks %s, KJ low-VRAM %s)",
             len(blocks),
             str(mode),
             str(ablation_mode),
+            state.sparse_scope,
             str(video_tail_mode),
             state.controller.config.global_anchor_dtype,
             str(tail_granularity),
@@ -1037,6 +1195,7 @@ class MiniMaxH3SolAttentionSM120(MiniMaxH3SparkAttentionSM120):
         required.pop("topk_mode")
         required.pop("topk_ratio")
         required.pop("topk_blocks")
+        inputs["optional"].pop("sparse_scope")
         inputs["optional"].pop("dense_backend")
         inputs["optional"].pop("tail_granularity")
         inputs["optional"].pop("reblock_layout")

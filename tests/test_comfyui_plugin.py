@@ -74,6 +74,162 @@ def test_comfy_layout_moves_target_video_first_and_roundtrips():
     torch.testing.assert_close(restored, values)
 
 
+def test_comfy_target_scope_keeps_released_layout_path():
+    positions = torch.zeros(12, 3, dtype=torch.float64)
+    positions[2:6] = torch.tensor(
+        [[0, 0, 0], [0, 0, 1], [0, 1, 0], [0, 1, 1]],
+        dtype=torch.float64,
+    )
+    positions[8:12] = torch.tensor(
+        [[1, 0, 0], [1, 0, 1], [1, 1, 0], [1, 1, 1]],
+        dtype=torch.float64,
+    )
+    layout = SimpleNamespace(
+        segments=[
+            (0, 2, "text"), (2, 6, "ref_img"), (6, 8, "audio"),
+            (8, 12, "video"),
+        ],
+        position_ids=positions,
+    )
+
+    implicit = _make_spark_layout(layout, 12, torch.device("cpu"))
+    explicit = _make_spark_layout(
+        layout, 12, torch.device("cpu"), sparse_scope="target-video"
+    )
+    assert explicit.grid == implicit.grid == (1, 2, 2)
+    assert explicit.video_tokens == implicit.video_tokens == 4
+    assert explicit.video_start == implicit.video_start == 8
+    assert explicit.permutation.tolist() == implicit.permutation.tolist() == (
+        list(range(8, 12)) + list(range(8))
+    )
+
+
+def test_comfy_ref_target_scope_packs_visual_references_and_restores_order():
+    positions = torch.zeros(12, 3, dtype=torch.float64)
+    positions[2:6] = torch.tensor(
+        [[0, 0, 0], [0, 0, 1], [1, 0, 0], [1, 0, 1]],
+        dtype=torch.float64,
+    )
+    positions[8:12] = torch.tensor(
+        [[2, 0, 0], [2, 0, 1], [3, 0, 0], [3, 0, 1]],
+        dtype=torch.float64,
+    )
+    layout = SimpleNamespace(
+        segments=[
+            (0, 2, "text"), (2, 6, "ref_img"), (6, 8, "audio"),
+            (8, 12, "video"),
+        ],
+        position_ids=positions,
+    )
+
+    spark = _make_spark_layout(
+        layout, 12, torch.device("cpu"), sparse_scope="joint-video"
+    )
+    assert spark.grid == (4, 1, 2)
+    assert spark.video_tokens == 8
+    assert spark.video_start is None
+    assert spark.permutation.tolist() == list(range(2, 6)) + list(range(8, 12)) + [0, 1, 6, 7]
+    values = torch.arange(12)
+    torch.testing.assert_close(
+        values[spark.permutation][spark.inverse_permutation], values
+    )
+
+
+def test_comfy_ref_target_scope_uses_flat_grid_for_mixed_resolutions():
+    positions = torch.zeros(10, 3, dtype=torch.float64)
+    positions[1:3] = torch.tensor([[0, 0, 0], [1, 0, 0]], dtype=torch.float64)
+    positions[6:10] = torch.tensor(
+        [[1, 0, 0], [1, 0, 1], [1, 1, 0], [1, 1, 1]],
+        dtype=torch.float64,
+    )
+    layout = SimpleNamespace(
+        segments=[
+            (0, 1, "text"), (1, 3, "ref_img"), (3, 5, "ref_audio"),
+            (5, 6, "audio"), (6, 10, "video"),
+        ],
+        position_ids=positions,
+    )
+
+    spark = _make_spark_layout(
+        layout, 10, torch.device("cpu"), sparse_scope="joint-video"
+    )
+    assert spark.grid == (1, 1, 6)
+    assert spark.video_tokens == 6
+    assert spark.permutation.tolist() == [1, 2, 6, 7, 8, 9, 0, 3, 4, 5]
+
+
+def test_comfy_ref_target_scope_keeps_static_reference_images_exact():
+    positions = torch.zeros(14, 3, dtype=torch.float64)
+    positions[2:4] = torch.tensor([[0, 0, 0], [0, 0, 1]], dtype=torch.float64)
+    positions[4:8] = torch.tensor(
+        [[1, 0, 0], [1, 0, 1], [2, 0, 0], [2, 0, 1]],
+        dtype=torch.float64,
+    )
+    positions[10:14] = torch.tensor(
+        [[3, 0, 0], [3, 0, 1], [4, 0, 0], [4, 0, 1]],
+        dtype=torch.float64,
+    )
+    layout = SimpleNamespace(
+        segments=[
+            (0, 2, "text"), (2, 4, "ref_img"), (4, 8, "ref_img"),
+            (8, 10, "audio"), (10, 14, "video"),
+        ],
+        position_ids=positions,
+    )
+
+    spark = _make_spark_layout(
+        layout, 14, torch.device("cpu"), sparse_scope="joint-video"
+    )
+    assert spark.video_tokens == 8
+    assert spark.permutation.tolist() == (
+        list(range(4, 8)) + list(range(10, 14)) + [0, 1, 2, 3, 8, 9]
+    )
+    assert 2 not in spark.permutation[:spark.video_tokens]
+    values = torch.arange(14)
+    torch.testing.assert_close(
+        values[spark.permutation][spark.inverse_permutation], values
+    )
+
+
+def test_comfy_ref_target_without_reference_is_identical_to_target():
+    positions = torch.zeros(6, 3, dtype=torch.float64)
+    positions[2:6] = torch.tensor(
+        [[0, 0, 0], [0, 0, 1], [0, 1, 0], [0, 1, 1]],
+        dtype=torch.float64,
+    )
+    layout = SimpleNamespace(
+        segments=[(0, 2, "text"), (2, 6, "video")],
+        position_ids=positions,
+    )
+    target = _make_spark_layout(layout, 6, torch.device("cpu"), "target")
+    combined = _make_spark_layout(layout, 6, torch.device("cpu"), "joint-video")
+    assert combined.grid == target.grid
+    assert combined.video_start == target.video_start
+    assert torch.equal(combined.permutation, target.permutation)
+
+
+def test_comfy_sparse_scope_validation():
+    with pytest.raises(ValueError, match="sparse_scope"):
+        _RunState.create(20, 0.2, 0.2, sparse_scope="invalid")
+    optional = MiniMaxH3SparkAttentionSM120.INPUT_TYPES()["optional"]
+    assert optional["sparse_scope"][0] == ["target-video", "joint-video"]
+    assert optional["sparse_scope"][1]["default"] == "target-video"
+    assert list(optional) == [
+        "dense_backend", "tail_granularity", "reblock_layout", "sparse_scope",
+    ]
+    assert "sparse_scope" not in MiniMaxH3SolAttentionSM120.INPUT_TYPES()["optional"]
+
+
+def test_legacy_target_sparse_scope_maps_to_target_video():
+    state = _RunState.create(20, 0.2, 0.2, sparse_scope="target")
+    assert state.sparse_scope == "target-video"
+
+
+def test_legacy_ref_target_sparse_scope_maps_to_joint_video():
+    state = _RunState.create(20, 0.2, 0.2, sparse_scope="ref+target")
+    assert state.sparse_scope == "joint-video"
+
+
 def test_ref2va_12fps_480p_layout_matches_validated_diffusers_shape():
     from comfy.ldm.minimax.model import PackedLayout
 
@@ -94,12 +250,59 @@ def test_ref2va_12fps_480p_layout_matches_validated_diffusers_shape():
     reference_start, reference_stop, kind = layout.segments[2]
     assert kind == "ref_img"
     assert reference_stop - reference_start == 6630
+    target_start, target_stop, target_kind = layout.segments[-1]
+    assert target_kind == "video"
+
+    spark = _make_spark_layout(
+        layout, layout.seq_len, torch.device("cpu"), sparse_scope="joint-video"
+    )
+    assert spark.video_tokens == (reference_stop - reference_start) + (
+        target_stop - target_start
+    )
+    assert spark.grid == (1, 1, spark.video_tokens)
+    assert spark.video_start is None
+    assert spark.permutation[:reference_stop - reference_start].tolist() == list(
+        range(reference_start, reference_stop)
+    )
 
     assert _apply_physical_time_rope({"layout": layout, "refs": refs})
     origin = original[reference_start, 0]
     torch.testing.assert_close(
         layout.position_ids[reference_start:reference_stop, 0],
         origin + (original[reference_start:reference_stop, 0] - origin) * 2.0,
+    )
+
+
+def test_ref2va_mixed_image_video_layout_sparsifies_only_reference_video():
+    from comfy.ldm.minimax.model import PackedLayout
+
+    refs = [
+        {"kind": "image", "latent_h": 30, "latent_w": 52},
+        {
+            "kind": "video_audio", "latent_t": 17,
+            "latent_h": 30, "latent_w": 52, "ref_audio_t": 207,
+        },
+    ]
+    layout = PackedLayout(128, 37, 48, 84, 207, refs=refs)
+    visual_refs = [segment for segment in layout.segments if segment[2] == "ref_img"]
+    assert len(visual_refs) == 2
+    image_start, image_stop, _ = visual_refs[0]
+    video_start, video_stop, _ = visual_refs[1]
+    target_start, target_stop, _ = next(
+        segment for segment in layout.segments if segment[2] == "video"
+    )
+
+    spark = _make_spark_layout(
+        layout, layout.seq_len, torch.device("cpu"), sparse_scope="joint-video"
+    )
+    expected_sparse = list(range(video_start, video_stop)) + list(
+        range(target_start, target_stop)
+    )
+    assert spark.video_tokens == len(expected_sparse)
+    assert spark.permutation[:spark.video_tokens].tolist() == expected_sparse
+    assert not any(
+        image_start <= index < image_stop
+        for index in spark.permutation[:spark.video_tokens].tolist()
     )
 
 
@@ -561,15 +764,57 @@ def test_spark_only_target_video_queries_use_sparse_output(
     controller = ComfySparkController(ComfySparkConfig(
         topk_mode=topk_mode, topk_blocks=topk_blocks,
     ))
+    # A joint-video composite has no single original video span. Even when the
+    # controller requests direct output, the backend must return packed order
+    # so the Python caller can restore it with inverse_permutation.
+    controller.direct_output = True
     output = comfy_kitchen_spark_attention(controller, q, k, v, layout, layer=1)
 
     assert call["topk_ratio"] == pytest.approx(expected_ratio)
     assert call["sink_q"] == [video_tokens // 64, (total_tokens + 63) // 64]
     assert call["sink_blocks"] == [video_tokens // 64, (total_tokens + 63) // 64]
+    assert call["video_start"] == 0
+    assert controller.output_in_original_layout is False
     torch.testing.assert_close(output[:, :video_tokens], torch.full_like(q[:, :video_tokens], 7))
     if video_tokens < total_tokens:
         torch.testing.assert_close(output[:, video_tokens:], torch.full_like(q[:, video_tokens:], 7))
     assert "sink_query_mode" not in MiniMaxH3SparkAttentionSM120.INPUT_TYPES()["optional"]
+
+
+def test_target_scope_keeps_backend_direct_output_path(monkeypatch):
+    from comfyui_backend import (
+        ComfyPackedLayout, ComfySparkConfig, ComfySparkController,
+        comfy_kitchen_spark_attention,
+    )
+
+    captured = {}
+    cuda_module = ModuleType("comfy_kitchen.backends.cuda")
+
+    def fake_spark(query, _key, _value, **kwargs):
+        captured.update(kwargs)
+        return query
+
+    cuda_module.spark_attn = fake_spark
+    monkeypatch.setitem(sys.modules, "comfy_kitchen.backends.cuda", cuda_module)
+    tokens, video_tokens, video_start = 70, 64, 6
+    q = torch.zeros(1, tokens, 1, 128, dtype=torch.bfloat16)
+    layout = ComfyPackedLayout(
+        permutation=torch.arange(tokens),
+        inverse_permutation=torch.arange(tokens),
+        grid=(1, 1, video_tokens),
+        video_tokens=video_tokens,
+        sequence_length=tokens,
+        video_positions=torch.zeros(video_tokens, 3),
+        video_start=video_start,
+    )
+    controller = ComfySparkController(ComfySparkConfig())
+    controller.topk_only = True
+    controller.direct_output = True
+
+    comfy_kitchen_spark_attention(controller, q, q, q, layout, layer=1)
+
+    assert captured["video_start"] == video_start
+    assert controller.output_in_original_layout is True
 
 
 class _FakeAttention:

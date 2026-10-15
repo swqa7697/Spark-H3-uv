@@ -171,7 +171,7 @@ def _resolve_kitchen_base(requested: str | None = None) -> str:
         found = "not installed" if base is None else base
         raise RuntimeError(
             f"unsupported comfy-kitchen base {found}; this package supports "
-            "ComfyUI 0.38.x (comfy-kitchen 0.2.36) and ComfyUI 0.39.x "
+            "ComfyUI 0.38.x (comfy-kitchen 0.2.36) and ComfyUI 0.39.x/0.40.x "
             "(comfy-kitchen 0.2.37). Use --kitchen-base only when the target "
             "ComfyUI version is known."
         )
@@ -364,7 +364,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--kitchen-base",
         choices=SUPPORTED_KITCHEN_BASES,
-        help="override automatic selection for ComfyUI 0.38.x or 0.39.x",
+        help="override automatic selection for ComfyUI 0.38.x, 0.39.x, or 0.40.x",
     )
     parser.add_argument(
         "--release-api",
