@@ -25,7 +25,11 @@ sparse_scope=joint-video
 
 ### 4. 新增可选 `producer_chunk`
 
-Spark Attention 节点现在可以直接设置 Q/K/V producer 每次处理的 token 数。默认值为 `16384`，必须是 64 的正整数倍。较小值可能降低 producer 阶段的临时显存，但会增加分块调用开销；该设置不需要重新编译 wheel。Sol 兼容节点不显示此参数。
+Spark Attention 节点新增可选参数 `producer_chunk`，默认值为 `16384`。适当调低该参数可以降低显存占用，但设置过低可能影响速度。
+
+### 5. 已知问题
+
+我们观察到，`mode=fidelity` 从 dense warmup steps 切换到 sparse steps 时，可能出现不合理的高显存占用，目前尚未找到原因。可以通过调低 `producer_chunk` 来降低显存占用，或改用 `mode=speed` 跳过 dense warmup 来规避。
 
 ## 兼容性
 
@@ -72,13 +76,13 @@ python_embeded\python.exe ComfyUI\custom_nodes\ComfyUI-Spark-H3\install.py
 
 ## English
 
-This release adds compatibility with ComfyUI 0.40.x and introduces optional `sparse_scope` and `producer_chunk` controls for Spark Attention. Ref2VA users can place reference-video and target-video tokens in one shared Spark sparse domain, while advanced users can tune Q/K/V producer chunking for their workload. Defaults remain unchanged.
+This release adds compatibility with ComfyUI 0.40.x and introduces optional `sparse_scope` and `producer_chunk` controls for Spark Attention. Ref2VA users can place reference-video and target-video tokens in one shared Spark sparse domain and adjust the Q/K/V producer chunk size to balance VRAM usage and performance for their workflows. Default behavior remains unchanged.
 
 ## Highlights
 
 ### 1. ComfyUI 0.40.x support
 
-### 2. Selectable Spark `sparse_scope`
+### 2. New Spark `sparse_scope`
 
 Spark Attention now provides two sparse scopes:
 
@@ -91,11 +95,15 @@ For video-conditioned Ref2VA, we recommend:
 sparse_scope=joint-video
 ```
 
-### 3. In-node Ref2VA guidance
+### 3. New in-node Ref2VA guidance
 
-### 4. Optional `producer_chunk`
+### 4. New optional `producer_chunk`
 
-Spark Attention now exposes the number of tokens handled by each Q/K/V producer chunk. The default is `16384`, and the value must be a positive multiple of 64. Smaller values may lower temporary producer memory at the cost of additional chunk-call overhead. This runtime setting does not require rebuilding the wheel. It is not shown on the Sol compatibility node.
+Spark Attention now provides an optional `producer_chunk` parameter with a default value of `16384`. Lowering it can reduce VRAM usage, but setting it too low may reduce performance.
+
+### 5. Known issue
+
+We have observed that `mode=fidelity` may use unexpectedly high VRAM when it transitions from dense warmup steps to sparse steps. The cause is currently unknown. Lowering `producer_chunk` can reduce VRAM usage, or `mode=speed` can be used to skip dense warmup and avoid the issue.
 
 ## Compatibility
 
@@ -136,4 +144,4 @@ Download `SHA256SUMS.txt` as well and verify the selected ZIP before installatio
 python_embeded\python.exe ComfyUI\custom_nodes\ComfyUI-Spark-H3\install.py
 ```
 
-Do not use a system Python installation unrelated to the ComfyUI runtime. This release is not currently available through the Comfy Registry; install it manually from one of the ZIP archives above.
+Do not use a system Python installation unrelated to the ComfyUI runtime. This release has not been published to the Comfy Registry; install it manually from one of the ZIP archives above.
