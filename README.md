@@ -55,7 +55,7 @@ The animated preview and linked clip cover the final 5.4 seconds, starting at 9 
 
 [![Animated Native MiniMax-H3 attic comparison: Dense, Spark-H3 Fidelity, and Spark-H3 Speed](assets/h3-native-attic-comparison-9s-to-end.webp)](assets/h3-native-attic-comparison-9s-to-end.mp4)
 
-<p align="center"><a href="assets/h3-native-attic-comparison-9s-to-end.mp4">▶ Watch the final 5.4 seconds with sound</a> · <a href="https://huggingface.co/Aazeus/Spark-H3/resolve/main/comfyui/demos/H3_native_vdn_selected_0006_dense_fidelity_speed_native_resolution.mp4">Watch the full 14.4-second comparison</a></p>
+<p align="center"><a href="https://huggingface.co/Aazeus/Spark-H3/resolve/main/comfyui/demos/H3_native_vdn_selected_0006_dense_fidelity_speed_native_resolution.mp4">Watch the full 14.4-second comparison</a></p>
 
 <a id="quick-start"></a>
 
