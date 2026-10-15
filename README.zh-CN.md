@@ -46,9 +46,12 @@ Spark-H3 提供 Spark 注意力算子及其与 MiniMax-H3 推理流程的集成�
 
 ## 🎬 演示
 
-[![Spark-H3 效果对比：Dense、Spark-H3 和 Sol-H3](assets/spark-h3-demo-preview.webp)](assets/spark-h3-demo.mp4)
+原生 MiniMax-H3 · VDN Selected Prompt 06 · 1344×768 · 14.4 秒。
+三栏对比 Dense、Spark-H3 Fidelity（2.19×）和 Spark-H3 Speed（3.12×）。
 
-<p align="center"><a href="assets/spark-h3-demo.mp4">▶ 观看带声音的完整演示</a></p>
+[![原生 MiniMax-H3 阁楼场景：Dense、Spark-H3 Fidelity 和 Spark-H3 Speed](assets/h3-native-attic-comparison-preview.webp)](https://huggingface.co/Aazeus/Spark-H3/resolve/main/comfyui/demos/H3_native_vdn_selected_0006_dense_fidelity_speed_native_resolution.mp4)
+
+<p align="center"><a href="https://huggingface.co/Aazeus/Spark-H3/resolve/main/comfyui/demos/H3_native_vdn_selected_0006_dense_fidelity_speed_native_resolution.mp4">▶ 观看带声音的阁楼场景对比视频</a></p>
 
 <a id="quick-start"></a>
 
