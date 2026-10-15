@@ -1,6 +1,6 @@
 # Spark-H3 ComfyUI 中文安装指南
 
-本指南适用于 Spark-H3 v0.1.4a0 的 ComfyUI 独立安装包。普通用户按照“快速安装”操作即可；手动指定 wheel、源码构建和 CUDA 12.8 实验通道集中在文末的“高级用法”。
+本指南适用于 Spark-H3 v0.1.4 的 ComfyUI 独立安装包。普通用户按照“快速安装”操作即可；手动指定 wheel、源码构建和 CUDA 12.8 实验通道集中在文末的“高级用法”。
 
 ## 支持范围
 
@@ -11,7 +11,7 @@
 - SM89：GeForce RTX 40 系。
 - SM120：GeForce RTX 50 系及 RTX PRO 5000/6000 Blackwell。
 
-安装包**不包含** ComfyUI、MiniMax-H3 模型权重、LoRA 或第三方工作流节点。CUDA 12.8 不属于 v0.1.4a0 预发布范围。
+安装包**不包含** ComfyUI、MiniMax-H3 模型权重、LoRA 或第三方工作流节点。CUDA 12.8 不属于 v0.1.4 正式发布范围。
 
 ## 快速安装
 
@@ -21,9 +21,9 @@
 
 | GPU | 架构 | Linux 安装包 | Windows 安装包 |
 | --- | --- | --- | --- |
-| GeForce RTX 30 系 | SM86 | `ComfyUI-Spark-H3-0.1.4a0-linux-x86_64-sm86-cu130.zip` | `ComfyUI-Spark-H3-0.1.4a0-windows-x86_64-sm86-cu130.zip` |
-| GeForce RTX 40 系 | SM89 | `ComfyUI-Spark-H3-0.1.4a0-linux-x86_64-sm89-cu130.zip` | `ComfyUI-Spark-H3-0.1.4a0-windows-x86_64-sm89-cu130.zip` |
-| GeForce RTX 50 系、RTX PRO 5000/6000 Blackwell | SM120 | `ComfyUI-Spark-H3-0.1.4a0-linux-x86_64-sm120-cu130.zip` | `ComfyUI-Spark-H3-0.1.4a0-windows-x86_64-sm120-cu130.zip` |
+| GeForce RTX 30 系 | SM86 | `ComfyUI-Spark-H3-0.1.4-linux-x86_64-sm86-cu130.zip` | `ComfyUI-Spark-H3-0.1.4-windows-x86_64-sm86-cu130.zip` |
+| GeForce RTX 40 系 | SM89 | `ComfyUI-Spark-H3-0.1.4-linux-x86_64-sm89-cu130.zip` | `ComfyUI-Spark-H3-0.1.4-windows-x86_64-sm89-cu130.zip` |
+| GeForce RTX 50 系、RTX PRO 5000/6000 Blackwell | SM120 | `ComfyUI-Spark-H3-0.1.4-linux-x86_64-sm120-cu130.zip` | `ComfyUI-Spark-H3-0.1.4-windows-x86_64-sm120-cu130.zip` |
 
 文件名中的以下部分必须与本机环境一致：
 
@@ -139,7 +139,7 @@ custom_nodes/ComfyUI-Spark-H3/ComfyUI-Spark-H3/install.py
 - `mode=dense`：完全绕过 Spark，用于排错或建立性能对照。
 - `mode=custom`：保留手动设置的 warmup 参数。
 
-`kitchen` 和 `sage` dense 后端在 v0.1.4a0 中仍属于实验选项，尚未完成完整的端到端质量回归测试。`sage` 还需要单独安装 `sageattention`。
+`kitchen` 和 `sage` dense 后端在 v0.1.4 中仍属于实验选项，尚未完成完整的端到端质量回归测试。`sage` 还需要单独安装 `sageattention`。
 
 双采或两阶段工作流的高分辨率第二阶段建议使用 `mode=speed`，关闭 dense warmup。节点中的一键切换提示只用于界面交互，不会写入工作流 JSON。
 
@@ -264,7 +264,7 @@ CUDA 13.0 源码构建目标为：SM86 使用 `86`，SM89 使用 `89`，SM120 �
 
 ### CUDA 12.8 实验通道
 
-CUDA 12.8 暂不作为 v0.1.4a0 预发布安装包发布。开发者可以显式提供本地 CU128 wheel：
+CUDA 12.8 暂不作为 v0.1.4 正式安装包发布。开发者可以显式提供本地 CU128 wheel：
 
 ```bash
 /path/to/ComfyUI/.venv/bin/python ComfyUI-Spark-H3/install.py \

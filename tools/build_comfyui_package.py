@@ -11,7 +11,7 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "ComfyUI-Spark-H3"
 PACKAGE_BUILD_IDENTITY = "spark_h3_build.json"
-DEFAULT_VERSION = "0.1.4a0"
+DEFAULT_VERSION = "0.1.4"
 DEFAULT_PUBLISHER_ID = "zechengtang"
 RELEASE_CUDA_TAGS = ("cu130",)
 EXPERIMENTAL_CUDA_TAGS = ("cu128", "cu129")

@@ -1,8 +1,8 @@
-# ComfyUI Spark-H3 v0.1.4a0
+# ComfyUI Spark-H3 v0.1.4
 
 ## 中文
 
-本预发布版本新增 ComfyUI 0.40.x 兼容支持，并为 Spark Attention 节点加入可选的 `sparse_scope`，使 Ref2VA 用户可以将参考视频与目标视频放入同一个 Spark 稀疏域。默认行为保持不变，已有工作流仍使用 `target-video`。
+本版本新增 ComfyUI 0.40.x 兼容支持，并为 Spark Attention 节点加入可选的 `sparse_scope`，使 Ref2VA 用户可以将参考视频与目标视频放入同一个 Spark 稀疏域。默认行为保持不变，已有工作流仍使用 `target-video`。
 
 ## 主要更新
 
@@ -37,9 +37,9 @@ sparse_scope=joint-video
 
 | GPU 架构 | Linux | Windows |
 | --- | --- | --- |
-| SM86 · RTX 30 系 | `ComfyUI-Spark-H3-0.1.4a0-linux-x86_64-sm86-cu130.zip` | `ComfyUI-Spark-H3-0.1.4a0-windows-x86_64-sm86-cu130.zip` |
-| SM89 · RTX 40 系 | `ComfyUI-Spark-H3-0.1.4a0-linux-x86_64-sm89-cu130.zip` | `ComfyUI-Spark-H3-0.1.4a0-windows-x86_64-sm89-cu130.zip` |
-| SM120 · RTX 50 系／RTX PRO Blackwell | `ComfyUI-Spark-H3-0.1.4a0-linux-x86_64-sm120-cu130.zip` | `ComfyUI-Spark-H3-0.1.4a0-windows-x86_64-sm120-cu130.zip` |
+| SM86 · RTX 30 系 | `ComfyUI-Spark-H3-0.1.4-linux-x86_64-sm86-cu130.zip` | `ComfyUI-Spark-H3-0.1.4-windows-x86_64-sm86-cu130.zip` |
+| SM89 · RTX 40 系 | `ComfyUI-Spark-H3-0.1.4-linux-x86_64-sm89-cu130.zip` | `ComfyUI-Spark-H3-0.1.4-windows-x86_64-sm89-cu130.zip` |
+| SM120 · RTX 50 系／RTX PRO Blackwell | `ComfyUI-Spark-H3-0.1.4-linux-x86_64-sm120-cu130.zip` | `ComfyUI-Spark-H3-0.1.4-windows-x86_64-sm120-cu130.zip` |
 
 请同时下载 `SHA256SUMS.txt` 并在安装前校验 ZIP。
 
@@ -62,13 +62,13 @@ sparse_scope=joint-video
 python_embeded\python.exe ComfyUI\custom_nodes\ComfyUI-Spark-H3\install.py
 ```
 
-请勿使用与 ComfyUI 运行环境无关的系统 Python。本预发布版本暂未推送到 Comfy Registry，请使用上述 ZIP 手动安装。
+请勿使用与 ComfyUI 运行环境无关的系统 Python。本版本未推送到 Comfy Registry，请使用上述 ZIP 手动安装。
 
 ---
 
 ## English
 
-This pre-release adds compatibility with ComfyUI 0.40.x and introduces a selectable `sparse_scope` for Spark Attention. Ref2VA users can place reference-video and target-video tokens in one shared Spark sparse domain. The default behavior is unchanged: existing workflows continue to use `target-video`.
+This release adds compatibility with ComfyUI 0.40.x and introduces a selectable `sparse_scope` for Spark Attention. Ref2VA users can place reference-video and target-video tokens in one shared Spark sparse domain. The default behavior is unchanged: existing workflows continue to use `target-video`.
 
 ## Highlights
 
@@ -103,9 +103,9 @@ Choose the package matching both your operating system and GPU architecture:
 
 | GPU architecture | Linux | Windows |
 | --- | --- | --- |
-| SM86 · RTX 30 series | `ComfyUI-Spark-H3-0.1.4a0-linux-x86_64-sm86-cu130.zip` | `ComfyUI-Spark-H3-0.1.4a0-windows-x86_64-sm86-cu130.zip` |
-| SM89 · RTX 40 series | `ComfyUI-Spark-H3-0.1.4a0-linux-x86_64-sm89-cu130.zip` | `ComfyUI-Spark-H3-0.1.4a0-windows-x86_64-sm89-cu130.zip` |
-| SM120 · RTX 50 series / RTX PRO Blackwell | `ComfyUI-Spark-H3-0.1.4a0-linux-x86_64-sm120-cu130.zip` | `ComfyUI-Spark-H3-0.1.4a0-windows-x86_64-sm120-cu130.zip` |
+| SM86 · RTX 30 series | `ComfyUI-Spark-H3-0.1.4-linux-x86_64-sm86-cu130.zip` | `ComfyUI-Spark-H3-0.1.4-windows-x86_64-sm86-cu130.zip` |
+| SM89 · RTX 40 series | `ComfyUI-Spark-H3-0.1.4-linux-x86_64-sm89-cu130.zip` | `ComfyUI-Spark-H3-0.1.4-windows-x86_64-sm89-cu130.zip` |
+| SM120 · RTX 50 series / RTX PRO Blackwell | `ComfyUI-Spark-H3-0.1.4-linux-x86_64-sm120-cu130.zip` | `ComfyUI-Spark-H3-0.1.4-windows-x86_64-sm120-cu130.zip` |
 
 Download `SHA256SUMS.txt` as well and verify the selected ZIP before installation.
 
@@ -128,4 +128,4 @@ Download `SHA256SUMS.txt` as well and verify the selected ZIP before installatio
 python_embeded\python.exe ComfyUI\custom_nodes\ComfyUI-Spark-H3\install.py
 ```
 
-Do not use a system Python installation unrelated to the ComfyUI runtime. This pre-release is not currently available through the Comfy Registry; install it manually from one of the ZIP archives above.
+Do not use a system Python installation unrelated to the ComfyUI runtime. This release is not currently available through the Comfy Registry; install it manually from one of the ZIP archives above.

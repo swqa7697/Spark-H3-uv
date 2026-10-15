@@ -29,9 +29,9 @@
 
 </div>
 
-> **ComfyUI v0.1.4a0 pre-release:** Adds ComfyUI 0.40.x support and
+> **ComfyUI v0.1.4:** Adds ComfyUI 0.40.x support and
 > `sparse_scope=joint-video` for video-conditioned Ref2VA.
-> **[Release notes and downloads](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4a0)**
+> **[Release notes and downloads](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4)**
 
 > 👉 [Ref2VA 任务加速解决方案](docs/sparse_scope.md#ref2va-任务加速解决方案)
 
@@ -104,7 +104,7 @@ GeForce RTX 50-series and RTX PRO 5000/6000 Blackwell GPUs (SM120). Choose the
 CUDA 13.0 package matching your operating system and GPU architecture.
 ComfyUI and model weights are not included.
 
-Download the **[v0.1.4a0 pre-release](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4a0)**,
+Download **[v0.1.4](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4)**,
 or see the **[ComfyUI guide](comfyui/README.md)** or
 **[中文安装指南](comfyui/INSTALL.zh-CN.md)** for downloads, installation, and
 example workflows.
