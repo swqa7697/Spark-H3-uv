@@ -29,6 +29,8 @@
 
 </div>
 
+> 👉 [Ref2VA 任务加速解决方案](docs/sparse_scope.md#ref2va-任务加速解决方案)
+
 ---
 
 ## ✨ Spark-Attn
