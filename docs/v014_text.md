@@ -37,6 +37,7 @@ Spark Attention 节点新增可选参数 `producer_chunk`，默认值为 `16384`
 - Linux x86_64 与 Windows x86_64
 - NVIDIA SM86、SM89 与 SM120 GPU
 - PyTorch CUDA 13.0
+- 每个 ZIP 同时内置适用于 ComfyUI 0.38.x 的 comfy-kitchen 0.2.36 wheel，以及适用于 ComfyUI 0.39.x/0.40.x 的 0.2.37 wheel
 - 旧版工作流可继续加载；未显式保存时使用 `sparse_scope=target-video` 和 `producer_chunk=16384`
 
 ## 下载
@@ -111,6 +112,7 @@ We have observed that `mode=fidelity` may use unexpectedly high VRAM when it tra
 - Linux x86_64 and Windows x86_64
 - NVIDIA SM86, SM89, and SM120 GPUs
 - PyTorch CUDA 13.0
+- Each ZIP bundles both a comfy-kitchen 0.2.36 wheel for ComfyUI 0.38.x and a 0.2.37 wheel for ComfyUI 0.39.x/0.40.x
 - Existing workflows continue to load; omitted values default to `sparse_scope=target-video` and `producer_chunk=16384`
 
 ## Downloads
