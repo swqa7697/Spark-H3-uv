@@ -2,7 +2,7 @@
 
 ## 中文
 
-本版本新增 ComfyUI 0.40.x 兼容支持，并为 Spark Attention 节点加入可选的 `sparse_scope`，使 Ref2VA 用户可以将参考视频与目标视频放入同一个 Spark 稀疏域。默认行为保持不变，已有工作流仍使用 `target-video`。
+本版本新增 ComfyUI 0.40.x 兼容支持，并为 Spark Attention 节点加入可选的 `sparse_scope` 与 `producer_chunk`。Ref2VA 用户可以将参考视频与目标视频放入同一个 Spark 稀疏域，也可以按工作流显存与性能需求调整 Q/K/V producer 的分块大小。默认行为保持不变。
 
 ## 主要更新
 
@@ -23,13 +23,17 @@ sparse_scope=joint-video
 
 ### 3. 新增 Ref2VA 节点内提示
 
+### 4. 新增可选 `producer_chunk`
+
+Spark Attention 节点现在可以直接设置 Q/K/V producer 每次处理的 token 数。默认值为 `16384`，必须是 64 的正整数倍。较小值可能降低 producer 阶段的临时显存，但会增加分块调用开销；该设置不需要重新编译 wheel。Sol 兼容节点不显示此参数。
+
 ## 兼容性
 
 - ComfyUI 0.38.x、0.39.x 与 0.40.x
 - Linux x86_64 与 Windows x86_64
 - NVIDIA SM86、SM89 与 SM120 GPU
 - PyTorch CUDA 13.0
-- 旧版工作流可继续加载；未显式保存 `sparse_scope` 时使用默认值 `target-video`
+- 旧版工作流可继续加载；未显式保存时使用 `sparse_scope=target-video` 和 `producer_chunk=16384`
 
 ## 下载
 
@@ -68,7 +72,7 @@ python_embeded\python.exe ComfyUI\custom_nodes\ComfyUI-Spark-H3\install.py
 
 ## English
 
-This release adds compatibility with ComfyUI 0.40.x and introduces a selectable `sparse_scope` for Spark Attention. Ref2VA users can place reference-video and target-video tokens in one shared Spark sparse domain. The default behavior is unchanged: existing workflows continue to use `target-video`.
+This release adds compatibility with ComfyUI 0.40.x and introduces optional `sparse_scope` and `producer_chunk` controls for Spark Attention. Ref2VA users can place reference-video and target-video tokens in one shared Spark sparse domain, while advanced users can tune Q/K/V producer chunking for their workload. Defaults remain unchanged.
 
 ## Highlights
 
@@ -89,13 +93,17 @@ sparse_scope=joint-video
 
 ### 3. In-node Ref2VA guidance
 
+### 4. Optional `producer_chunk`
+
+Spark Attention now exposes the number of tokens handled by each Q/K/V producer chunk. The default is `16384`, and the value must be a positive multiple of 64. Smaller values may lower temporary producer memory at the cost of additional chunk-call overhead. This runtime setting does not require rebuilding the wheel. It is not shown on the Sol compatibility node.
+
 ## Compatibility
 
 - ComfyUI 0.38.x, 0.39.x, and 0.40.x
 - Linux x86_64 and Windows x86_64
 - NVIDIA SM86, SM89, and SM120 GPUs
 - PyTorch CUDA 13.0
-- Existing workflows continue to load; workflows without a serialized `sparse_scope` use the `target-video` default
+- Existing workflows continue to load; omitted values default to `sparse_scope=target-video` and `producer_chunk=16384`
 
 ## Downloads
 

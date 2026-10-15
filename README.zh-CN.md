@@ -30,7 +30,8 @@
 </div>
 
 > **ComfyUI v0.1.4：** 新增 ComfyUI 0.40.x 支持，并为带视频条件的
-> Ref2VA 提供 `sparse_scope=joint-video`。
+> Ref2VA 提供 `sparse_scope=joint-video`，同时新增可选的 `producer_chunk`
+> 用于控制 Spark Q/K/V producer 分块。
 > **[查看发布说明并下载](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4)**
 
 > 👉 [Ref2VA 任务加速解决方案](docs/sparse_scope.md#ref2va-任务加速解决方案)

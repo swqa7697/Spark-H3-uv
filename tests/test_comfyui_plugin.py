@@ -216,8 +216,29 @@ def test_comfy_sparse_scope_validation():
     assert optional["sparse_scope"][1]["default"] == "target-video"
     assert list(optional) == [
         "dense_backend", "tail_granularity", "reblock_layout", "sparse_scope",
+        "producer_chunk",
     ]
     assert "sparse_scope" not in MiniMaxH3SolAttentionSM120.INPUT_TYPES()["optional"]
+
+
+def test_comfy_producer_chunk_validation():
+    optional = MiniMaxH3SparkAttentionSM120.INPUT_TYPES()["optional"]
+    producer_chunk = optional["producer_chunk"]
+    assert producer_chunk[0] == "INT"
+    assert producer_chunk[1] == {
+        "default": 16384,
+        "min": 64,
+        "max": 262144,
+        "step": 64,
+        "tooltip": producer_chunk[1]["tooltip"],
+    }
+    assert _RunState.create(20, 0.2, 0.2).producer_chunk == 16384
+    assert _RunState.create(20, 0.2, 0.2, producer_chunk=8192).producer_chunk == 8192
+    with pytest.raises(ValueError, match="producer_chunk"):
+        _RunState.create(20, 0.2, 0.2, producer_chunk=0)
+    with pytest.raises(ValueError, match="producer_chunk"):
+        _RunState.create(20, 0.2, 0.2, producer_chunk=1000)
+    assert "producer_chunk" not in MiniMaxH3SolAttentionSM120.INPUT_TYPES()["optional"]
 
 
 def test_legacy_target_sparse_scope_maps_to_target_video():

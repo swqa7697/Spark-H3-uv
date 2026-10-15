@@ -43,6 +43,9 @@ def test_standalone_package_is_small_complete_and_importable(tmp_path):
     assert '"Dense warmup 加速：可使用 dense_backend=kitchen → 一键切换"' in mode_widget_source
     assert '"带视频条件的 Ref2VA：建议使用 sparse_scope=joint-video → 一键切换"' in mode_widget_source
     assert "{ serialize: false }" in mode_widget_source
+    node_source = (package / "comfyui_nodes.py").read_text(encoding="utf-8")
+    assert '"producer_chunk": (' in node_source
+    assert 'range(0, tokens, producer_chunk)' in node_source
     assert not (package / "comfyui_ref2va.py").exists()
     assert (package / "h3_sparse_attention/landmark_tree_v2.py").is_file()
     assert not (package / "h3_sparse_attention/spark_reweight_sm89.py").exists()
@@ -260,6 +263,14 @@ assert 'MiniMaxH3SparkAttentionSM86' not in module.NODE_DISPLAY_NAME_MAPPINGS
 assert 'MiniMaxH3SparkAttentionSM89' not in module.NODE_DISPLAY_NAME_MAPPINGS
 assert set(module.NODE_CLASS_MAPPINGS) == set(module.NODE_DISPLAY_NAME_MAPPINGS)
 assert 'MiniMaxH3Ref2VA12FPS480P' not in module.NODE_CLASS_MAPPINGS
+spark_inputs = module.NODE_CLASS_MAPPINGS[
+    'MiniMaxH3SparkAttentionSM120'
+].INPUT_TYPES()
+assert spark_inputs['optional']['producer_chunk'][0] == 'INT'
+assert spark_inputs['optional']['producer_chunk'][1]['default'] == 16384
+assert spark_inputs['optional']['producer_chunk'][1]['step'] == 64
+sol_inputs = module.NODE_CLASS_MAPPINGS['MiniMaxH3SolAttentionSM120'].INPUT_TYPES()
+assert 'producer_chunk' not in sol_inputs['optional']
 for workflow_path in (root / 'workflows').glob('*.json'):
     workflow = __import__('json').loads(workflow_path.read_text(encoding='utf-8'))
     spark_nodes = [

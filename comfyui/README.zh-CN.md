@@ -60,6 +60,10 @@ speed 预设。
 当未连接外部输入且仍选择 `target-video` 时，节点会显示一个不参与序列化的提醒按钮，
 显示“带视频条件的 Ref2VA：建议使用 sparse_scope=joint-video → 一键切换”；点击即可切换。
 
+`producer_chunk` 是 Spark Q/K/V producer 每次处理的 token 数，默认 `16384`，
+必须是 64 的正整数倍。减小它可能降低 producer 阶段的临时显存，但会增加分块调用
+开销；未经实测建议保持默认值。该设置只影响 Python 运行时分块，不需要重新编译 wheel。
+
 `dense_backend` 控制 dense 预热、固定 dense 层、短序列和非严格模式回退。
 默认 `inherit` 不强制覆盖，沿用模型或 ComfyUI 当前的注意力后端；也可以选择
 `kitchen`、`sage` 或 `sdpa`，只对这些 dense 调用强制使用对应的已注册后端。该切换发生在 Python

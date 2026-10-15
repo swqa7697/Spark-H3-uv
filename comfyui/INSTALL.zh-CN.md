@@ -132,6 +132,7 @@ custom_nodes/ComfyUI-Spark-H3/ComfyUI-Spark-H3/install.py
 - `mode=fidelity`：前 20% 的采样调用使用 dense attention，之后使用 Spark，在保真度和速度之间取得平衡。
 - `topk_mode=topk_ratio`、`topk_ratio=0.2`：精确计算约 20% 的候选视频块。
 - `dense_backend=inherit`：沿用模型或 ComfyUI 当前的注意力设置。
+- `producer_chunk=16384`：Spark producer 每批处理的 token 数。必须是 64 的正整数倍；除非显存压力测试表明更小值有帮助，否则保持默认值。
 
 确认能够正常生成后，可以复制一份工作流再尝试：
 
@@ -142,6 +143,8 @@ custom_nodes/ComfyUI-Spark-H3/ComfyUI-Spark-H3/install.py
 `kitchen` 和 `sage` dense 后端在 v0.1.4 中仍属于实验选项，尚未完成完整的端到端质量回归测试。`sage` 还需要单独安装 `sageattention`。
 
 双采或两阶段工作流的高分辨率第二阶段建议使用 `mode=speed`，关闭 dense warmup。节点中的一键切换提示只用于界面交互，不会写入工作流 JSON。
+
+`producer_chunk` 只改变 Python 运行时的 Q/K/V producer 分块，不改变 wheel ABI，也不需要重新编译 comfy-kitchen。减小它可能降低临时显存，但会增加分块调用开销。
 
 ## 配合 KJNodes 降低显存占用
 

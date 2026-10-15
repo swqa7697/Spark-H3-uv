@@ -37,8 +37,8 @@ except ImportError:  # standalone source-tree tests
 
 log = logging.getLogger(__name__)
 _PRODUCER_CHUNK = int(os.environ.get("H3_SPARK_PRODUCER_CHUNK", "16384"))
-if _PRODUCER_CHUNK <= 0:
-    raise ValueError("H3_SPARK_PRODUCER_CHUNK must be positive")
+if _PRODUCER_CHUNK <= 0 or _PRODUCER_CHUNK % 64:
+    raise ValueError("H3_SPARK_PRODUCER_CHUNK must be a positive multiple of 64")
 
 _DENSE_ATTENTION_FUNCTIONS = {
     "sdpa": "pytorch",
@@ -362,6 +362,7 @@ class _RunState:
     warmup_mode: str = "warmup_ratio"
     warmup_steps: int = 4
     sparse_scope: str = "target-video"
+    producer_chunk: int = _PRODUCER_CHUNK
     previous_sigma: float | None = None
     layout_cache: dict[tuple[int, int, str, str], ComfyPackedLayout] = field(
         default_factory=dict
@@ -384,6 +385,7 @@ class _RunState:
         warmup_steps: int = 4,
         reblock_layout: str = "q_reuse_k",
         sparse_scope: str = "target-video",
+        producer_chunk: int = _PRODUCER_CHUNK,
         target_capability: tuple[int, int] = (12, 0),
     ):
         if warmup_mode not in ("warmup_ratio", "warmup_steps"):
@@ -392,6 +394,8 @@ class _RunState:
             raise ValueError("warmup_ratio must lie in [0, 1]")
         if type(warmup_steps) is not int or warmup_steps < 0:
             raise ValueError("warmup_steps must be a nonnegative integer")
+        if type(producer_chunk) is not int or producer_chunk <= 0 or producer_chunk % 64:
+            raise ValueError("producer_chunk must be a positive multiple of 64")
         sparse_scope = _normalize_sparse_scope(sparse_scope)
         if sparse_scope not in _SPARSE_SCOPES:
             raise ValueError(
@@ -439,6 +443,7 @@ class _RunState:
             target_capability=target_capability,
             warmup_mode=warmup_mode, warmup_steps=warmup_steps,
             sparse_scope=sparse_scope,
+            producer_chunk=producer_chunk,
         )
         state.controller.topk_only = ablation_mode == "topk_only"
         # The exact kernel can scatter video-first rows directly into H3's
@@ -553,7 +558,16 @@ def _native_spark_eligible(attn, x, rope_freqs, transformer_options, layer, poli
     return reason, True
 
 
-def _native_spark_qkv(attn, x, rope_freqs, permutation, *, video_start=None, video_tokens=None):
+def _native_spark_qkv(
+    attn,
+    x,
+    rope_freqs,
+    permutation,
+    *,
+    producer_chunk: int = _PRODUCER_CHUNK,
+    video_start=None,
+    video_tokens=None,
+):
     """ComfyUI-style chunked H3 producer yielding contiguous BTHD Q/K/V."""
     import comfy.model_management
     import comfy.model_prefetch
@@ -592,8 +606,8 @@ def _native_spark_qkv(attn, x, rope_freqs, permutation, *, video_start=None, vid
         ck._C.sol_producer_begin(wrap(bsa_workspace), 1, tokens, heads, stream, 0)
 
     with comfy.model_prefetch.pause_malloc_graph():
-        for start in range(0, tokens, _PRODUCER_CHUNK):
-            stop = min(start + _PRODUCER_CHUNK, tokens)
+        for start in range(0, tokens, producer_chunk):
+            stop = min(start + producer_chunk, tokens)
             offset = None
             if video_start is not None and video_tokens is not None:
                 video_end = video_start + video_tokens
@@ -733,6 +747,7 @@ def _native_spark_attention(attn, x, rope_freqs, transformer_options, layer, sta
         qkv_profile = ("qkv_materialize", qkv_start, qkv_end)
     q, k, v = _native_spark_qkv(
         attn, x, rope_freqs, layout.permutation,
+        producer_chunk=state.producer_chunk,
         video_start=layout.video_start, video_tokens=layout.video_tokens,
     )
     if qkv_profile is not None:
@@ -1039,6 +1054,11 @@ class MiniMaxH3SparkAttentionSM120:
                     {"default": "target-video",
                      "tooltip": "稀疏视觉范围：target-video（默认）只稀疏目标视频；joint-video 将参考视频与目标视频放入同一个稀疏域，统一执行 Reblock、Top-K 和 Reweight。静态参考图、文本和音频仍保持 exact。"},
                 ),
+                "producer_chunk": (
+                    "INT",
+                    {"default": _PRODUCER_CHUNK, "min": 64, "max": 262144, "step": 64,
+                     "tooltip": "Spark Q/K/V producer 每次处理的 token 数。默认 16384；较小值可能降低临时显存，但会增加分块调用开销。必须是 64 的正整数倍。"},
+                ),
             },
         }
 
@@ -1077,6 +1097,7 @@ class MiniMaxH3SparkAttentionSM120:
         reblock_layout="q_reuse_k",
         dense_backend="inherit",
         sparse_scope="target-video",
+        producer_chunk=_PRODUCER_CHUNK,
     ):
         if _spark_mode_is_dense(str(mode)):
             return (model,)
@@ -1105,6 +1126,7 @@ class MiniMaxH3SparkAttentionSM120:
             warmup_steps=int(warmup_steps),
             reblock_layout=str(reblock_layout),
             sparse_scope=str(sparse_scope),
+            producer_chunk=int(producer_chunk),
             target_capability=self.TARGET_CAPABILITY,
         )
         if kj_low_vram_forward is not None:
@@ -1164,11 +1186,12 @@ class MiniMaxH3SparkAttentionSM120:
         )
         log.info(
             "[Spark-H3] installed ComfyUI-native producer on %d H3 blocks "
-            "(profile %s, mode %s, sparse scope %s, tail %s, anchor %s, approximation %s, midpoint %s, reblock %s, Top-K %s, warmup %s, dense backend %s, dense blocks %s, KJ low-VRAM %s)",
+            "(profile %s, mode %s, sparse scope %s, producer chunk %d, tail %s, anchor %s, approximation %s, midpoint %s, reblock %s, Top-K %s, warmup %s, dense backend %s, dense blocks %s, KJ low-VRAM %s)",
             len(blocks),
             str(mode),
             str(ablation_mode),
             state.sparse_scope,
+            state.producer_chunk,
             str(video_tail_mode),
             state.controller.config.global_anchor_dtype,
             str(tail_granularity),
@@ -1196,6 +1219,7 @@ class MiniMaxH3SolAttentionSM120(MiniMaxH3SparkAttentionSM120):
         required.pop("topk_ratio")
         required.pop("topk_blocks")
         inputs["optional"].pop("sparse_scope")
+        inputs["optional"].pop("producer_chunk")
         inputs["optional"].pop("dense_backend")
         inputs["optional"].pop("tail_granularity")
         inputs["optional"].pop("reblock_layout")

@@ -172,6 +172,12 @@ is present, it automatically uses the identical target-only path. Prefer
 fraction after reference blocks are added. An unlinked target scope displays a
 non-serialized one-click reminder for video-conditioned Ref2VA workflows.
 
+`producer_chunk` is an optional Spark-node setting for the number of tokens
+handled by each Q/K/V producer chunk. It defaults to `16384` and must be a
+positive multiple of 64. Smaller chunks may lower temporary producer memory
+but add chunk-call overhead. It is a Python runtime setting and does not
+require rebuilding the bundled wheel.
+
 ## Example workflows
 
 The package keeps five examples under `workflows/`:

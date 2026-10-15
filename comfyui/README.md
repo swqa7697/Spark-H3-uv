@@ -76,6 +76,12 @@ a smaller fraction of the enlarged candidate set. While an unlinked
 `sparse_scope` remains `target-video`, a non-serialized reminder offers one-click
 switching to `joint-video` for Ref2VA tasks with video conditioning.
 
+`producer_chunk` optionally controls how many tokens the Spark Q/K/V producer
+handles per chunk. It defaults to `16384` and must be a positive multiple of
+64. Smaller values may reduce temporary producer memory at the cost of more
+chunk calls; keep the default unless profiling shows a benefit. This is a
+Python-side runtime setting and does not require rebuilding the wheel.
+
 `dense_backend` controls dense warmup steps, permanently dense layers, short-sequence
 execution, and non-strict fallback calls. Keep the default `inherit` to follow
 the model's or ComfyUI's configured attention backend, or select `kitchen`, `sage`, or `sdpa`
