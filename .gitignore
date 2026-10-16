@@ -10,3 +10,4 @@ dist/
 /.agents/
 reports/
 .ipynb_checkpoints/
+/tail_exp_status.json
