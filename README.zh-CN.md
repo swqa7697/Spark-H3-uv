@@ -34,6 +34,10 @@
 > 用于控制 Spark Q/K/V producer 分块。
 > **[查看发布说明并下载](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4)**
 
+> **Spark-VPack v0.1.0：** 独立的 ComfyUI 插件，用于压缩原生 Ref2VA 任务中的参考视频；
+> 推荐使用默认的 `2/5`。
+> **[查看发布说明并下载](https://github.com/zechengtang/Spark-H3/releases/tag/spark-vpack-v0.1.0)**
+
 > 👉 [Ref2VA 任务加速解决方案](docs/sparse_scope.md#ref2va-任务加速解决方案)
 
 ---
@@ -97,6 +101,8 @@ with install_h3_spark_attn(
 Spark-H3 为 Linux 和 Windows x86_64 上的 ComfyUI 0.38.x、0.39.x 与 0.40.x 提供独立节点。发布包支持 GeForce RTX 30 系列（SM86）、GeForce RTX 40 系列（SM89），以及 GeForce RTX 50 系列和 RTX PRO 5000/6000 Blackwell（SM120）。请选择与操作系统和 GPU 架构匹配的 CUDA 13.0 安装包。发布包不包含 ComfyUI 和模型权重。
 
 可直接下载 [v0.1.4](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4)；安装方法及示例工作流请参阅 [ComfyUI 指南](comfyui/README.md) 或 [中文安装指南](comfyui/INSTALL.zh-CN.md)。
+
+如需压缩原生 Ref2VA 任务中的参考视频，可另行安装独立插件 **[Spark-VPack v0.1.0](https://github.com/zechengtang/Spark-H3/releases/tag/spark-vpack-v0.1.0)**。
 
 ## 步数约定
 

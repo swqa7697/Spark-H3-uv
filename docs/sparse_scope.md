@@ -150,9 +150,9 @@ KV_exact = All - V_t
 
 Spark-H3 v0.1.3 默认使用 `sparse_scope=target-video`，因此 Ref2VA 的参考视频仍以 dense 方式参与计算，整体加速比通常低于参考帧较少的 FL2VA。这是默认稀疏范围覆盖较小所致，并非 Ref2VA 的稀疏算子变慢。
 
-作为临时方案，Ref2VA 用户可以先更新到 Spark-H3 v0.1.4，并将 `sparse_scope` 设置为 `joint-video`。这样，多时间位置的参考视频视觉 token 会与目标视频共同进入 Spark 稀疏域，从而减少参考视频保持 dense 带来的额外开销。后续作者有计算资源后会重新编译，进一步解决 Ref2VA 的加速问题。
+Ref2VA 用户可以安装 [Spark-H3 v0.1.4](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4)，并将 `sparse_scope` 设置为 `joint-video`。这样，多时间位置的参考视频视觉 token 会与目标视频共同进入 Spark 稀疏域，从而减少参考视频保持 dense 带来的额外开销。
 
-用于压缩参考视频的实验性节点 `ComfyUI-Spark-VPack` 将独立发布。Ref2VA 用户可以将该节点与 Spark-H3 结合使用，获得进一步加速。
+独立插件 [Spark-VPack v0.1.0](https://github.com/zechengtang/Spark-H3/releases/tag/spark-vpack-v0.1.0) 用于压缩 Ref2VA 任务中的参考视频，推荐默认档位为 `2/5`；可按需与 Spark-H3 一起使用。
 
 ## 对照摘要
 

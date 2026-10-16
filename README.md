@@ -30,9 +30,12 @@
 </div>
 
 > **ComfyUI v0.1.4:** Adds ComfyUI 0.40.x support and
-> `sparse_scope=joint-video` for video-conditioned Ref2VA, plus an optional
-> `producer_chunk` control for Spark Q/K/V producer chunking.
+> `sparse_scope=joint-video` for video-conditioned Ref2VA.
 > **[Release notes and downloads](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4)**
+
+> **Spark-VPack v0.1.0:** A separate ComfyUI plugin that compresses reference
+> videos in native Ref2VA workflows.
+> **[Release notes and download](https://github.com/zechengtang/Spark-H3/releases/tag/spark-vpack-v0.1.0)**
 
 > 👉 [Ref2VA 任务加速解决方案](docs/sparse_scope.md#ref2va-任务加速解决方案)
 
@@ -109,6 +112,9 @@ Download **[v0.1.4](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui
 or see the **[ComfyUI guide](comfyui/README.md)** or
 **[中文安装指南](comfyui/INSTALL.zh-CN.md)** for downloads, installation, and
 example workflows.
+
+For reference-video compression in native Ref2VA workflows, install the separate
+**[Spark-VPack v0.1.0](https://github.com/zechengtang/Spark-H3/releases/tag/spark-vpack-v0.1.0)** plugin.
 
 ## Step-count convention
 
