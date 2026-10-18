@@ -3,6 +3,8 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.venv/
+.ruff_cache/
 *.egg-info/
 build/
 dist/
@@ -11,3 +13,6 @@ dist/
 reports/
 .ipynb_checkpoints/
 /tail_exp_status.json
+
+.misc/
+.tmp/

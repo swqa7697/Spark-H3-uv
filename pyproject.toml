@@ -15,6 +15,9 @@ cuda = ["triton>=3.2", "nvidia-cutlass-dsl>=4.4", "cuda-python>=12", "apache-tvm
 test = ["pytest>=8"]
 lbh = ["diffusers>=0.36.0", "huggingface-hub>=0.28", "safetensors>=0.4"]
 
+[dependency-groups]
+dev = ["numpy>=1.24", "packaging>=24", "ruff==0.17.0", "tqdm>=4.66"]
+
 [tool.setuptools]
 license-files = ["LICENSE", "sol_attn/THIRD_PARTY_NOTICES.md", "sol_attn/sm100/LICENSE.flash-attention"]
 
@@ -24,3 +27,11 @@ include = ["h3_sparse_attention*", "h3_lbh*", "sol_attn*"]
 [tool.setuptools.package-data]
 h3_sparse_attention = ["*.md", "PORT_MANIFEST.json"]
 sol_attn = ["THIRD_PARTY_NOTICES.md", "sm100/LICENSE.flash-attention"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
