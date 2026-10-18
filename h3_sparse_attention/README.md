@@ -305,15 +305,16 @@ with `B * P * H * ceil(T / 64) * 128`; choose the anchor count accordingly.
 
 Run these commands from the repository root with uv installed. The Python 3.12
 development environment uses CPU PyTorch and installs this project in editable
-mode. It includes tools for packaging checks. For GPU inference, follow the
-installation instructions above in your H3 or ComfyUI environment.
+mode. It includes tools for packaging and release kit checks. For GPU inference,
+follow the installation instructions above in your H3 or ComfyUI environment.
 
 ```bash
 uv sync --locked --extra test
 uv lock --check
 uv run --locked --extra test python -m pytest -q \
   tests/test_comfyui_package.py \
-  tests/test_compact_ref2va_package.py
+  tests/test_compact_ref2va_package.py \
+  tests/test_spark_release_toolkit.py
 uv build --out-dir .misc/dist
 ```
 
