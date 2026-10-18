@@ -78,6 +78,8 @@ custom_nodes/ComfyUI-Spark-H3/ComfyUI-Spark-H3/install.py
 
 必须使用**启动当前 ComfyUI 的同一个 Python**执行 `install.py`。不要直接双击 `install.py`，也不要随意使用系统的 `python` 或 `pip`。
 
+安装器依次选择 PATH 中的 `uv`、当前 Python 环境中的 `uv` 模块、当前环境已有的 `pip`。uv 命令会明确指定 ComfyUI 的 Python，因此 uv 管理的虚拟环境无需安装 pip。安装器不会自动安装 uv 或 pip。通过 ComfyUI Manager 安装时也会运行同一个安装器。
+
 #### Windows 便携版
 
 在 `ComfyUI_windows_portable` 目录打开 PowerShell：

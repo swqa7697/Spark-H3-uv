@@ -4,14 +4,16 @@ import importlib.util
 import io
 import json
 import math
+import os
+import shutil
 import subprocess
 import sys
-from types import ModuleType
 import zipfile
 from pathlib import Path
+from types import ModuleType
 
-import tomllib
 import pytest
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -20,7 +22,12 @@ def _load(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    original_path = sys.path[:]
+    sys.path.insert(0, str(path.parent))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path[:] = original_path
     return module
 
 
@@ -34,6 +41,8 @@ def test_standalone_package_is_small_complete_and_importable(tmp_path):
     )
     assert (package / "__init__.py").is_file()
     assert (package / "comfyui_backend.py").is_file()
+    assert (package / "package_manager.py").is_file()
+    assert "packaging>=24" in (package / "requirements.txt").read_text()
     mode_widgets = package / "web/spark_mode_widgets.js"
     assert mode_widgets.is_file()
     mode_widget_source = mode_widgets.read_text(encoding="utf-8")
@@ -317,6 +326,7 @@ def test_standalone_zip_has_one_installable_root(tmp_path):
     assert names
     assert all(name.startswith("ComfyUI-Spark-H3/") for name in names)
     assert "ComfyUI-Spark-H3/install.py" in names
+    assert "ComfyUI-Spark-H3/package_manager.py" in names
     assert "ComfyUI-Spark-H3/pyproject.toml" in names
     assert {
         "ComfyUI-Spark-H3/wheelhouse/" + wheel.name for wheel in wheels
@@ -345,6 +355,9 @@ def test_registry_package_routes_kitchen_wheels_to_releases(tmp_path):
     assert identity["kernel_wheels"] == []
     assert identity["backend_source"] == "github-release"
     assert identity["backend_release_tag"] == "comfyui-v0.1.5"
+    assert (package / "package_manager.py").read_bytes() == (
+        ROOT / "comfyui/package_manager.py"
+    ).read_bytes()
 
     workflows = list((package / "workflows").glob("*.json"))
     assert len(workflows) == 15
@@ -370,7 +383,15 @@ def test_registry_package_routes_kitchen_wheels_to_releases(tmp_path):
     with zipfile.ZipFile(archive) as bundle:
         names = bundle.namelist()
     assert "pyproject.toml" in names
+    assert "package_manager.py" in names
     assert not any(name.startswith("ComfyUI-Spark-H3/") for name in names)
+    for script in ("install.py", "kernel_builder.py"):
+        subprocess.run(
+            [sys.executable, str(package / script), "--help"],
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
+        )
 
 
 def test_installer_routes_release_archive_to_matching_kitchen_wheel(tmp_path, monkeypatch):
@@ -392,7 +413,7 @@ def test_installer_routes_release_archive_to_matching_kitchen_wheel(tmp_path, mo
     assert url == archive_path.as_uri()
     installed = []
     monkeypatch.setattr(installer.urllib.request, "urlopen", lambda *_args, **_kwargs: archive_path.open("rb"))
-    monkeypatch.setattr(installer, "_pip_install", lambda path, **_kwargs: installed.append((Path(path).name, Path(path).read_bytes())))
+    monkeypatch.setattr(installer, "_install", lambda path, **_kwargs: installed.append((Path(path).name, Path(path).read_bytes())))
     installer._install_release_asset(url, "0.2.39", "sm120", "cu130")
     assert installed == [(matching, b"matching-wheel")]
 
@@ -849,6 +870,9 @@ def test_kernel_builder_recognizes_an_existing_release_wheel(tmp_path, monkeypat
 
     monkeypatch.setattr(kernel_builder.tempfile, "TemporaryDirectory", lambda **_kwargs: TemporarySource())
     monkeypatch.setattr(kernel_builder, "prepare_source", lambda *_args, **_kwargs: tmp_path)
+    monkeypatch.setattr(
+        kernel_builder, "wheel_command", lambda *_args: ["test-builder"]
+    )
     run_calls = []
     monkeypatch.setattr(
         kernel_builder,
@@ -875,10 +899,7 @@ def test_kernel_builder_recognizes_an_existing_release_wheel(tmp_path, monkeypat
 
 def test_installer_selects_matching_base_from_local_wheels(tmp_path):
     installer = _load("spark_comfyui_installer", ROOT / "comfyui/install.py")
-    try:
-        from packaging.tags import sys_tags
-    except ImportError:
-        from pip._vendor.packaging.tags import sys_tags
+    from packaging.tags import sys_tags
     tag = next(iter(sys_tags()))
     wheelhouse = tmp_path / "wheelhouse"
     wheelhouse.mkdir()
@@ -1051,6 +1072,11 @@ def test_installer_source_build_routes_isolated_identity(
     monkeypatch.setattr(installer, "_cuda_capability", lambda: capability)
     monkeypatch.setattr(installer, "_backend_available", lambda *_args: False)
     monkeypatch.setattr(installer, "_validate_backend", lambda *_args: None)
+    monkeypatch.setattr(
+        installer,
+        "_install_requirements",
+        lambda _root: pytest.fail("--skip-dependencies must skip requirements"),
+    )
     kernel_builder = ModuleType("kernel_builder")
     kernel_builder.install_from_source = lambda *_args, **kwargs: calls.append(kwargs)
     monkeypatch.setitem(sys.modules, "kernel_builder", kernel_builder)
@@ -1097,7 +1123,7 @@ def test_installer_automatically_tries_cu130_wheel_on_newer_cuda(
     monkeypatch.setattr(installer, "_backend_available", lambda *_args: False)
     monkeypatch.setattr(installer, "_matching_release_wheel", lambda *_args: (_ for _ in ()).throw(AssertionError("unexpected download")))
     installed = []
-    monkeypatch.setattr(installer, "_pip_install", lambda path, **_kwargs: installed.append(path))
+    monkeypatch.setattr(installer, "_install", lambda path, **_kwargs: installed.append(path))
     monkeypatch.setattr(installer, "_validate_backend", lambda *args: installed.append(args))
     arguments = ["--skip-dependencies", "--kitchen-base", "0.2.39"]
     if explicit_wheel:
@@ -1161,3 +1187,306 @@ def test_installer_validation_does_not_reimport_cached_backend(monkeypatch, caps
     installer._validate_backend("0.2.37")
 
     assert "SM120 CU130 backend is ready" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("tool", ("path-uv", "module-uv", "pip", "broken-path-uv"))
+def test_package_manager_selects_existing_tools(monkeypatch, tmp_path, tool):
+    manager = _load("spark_package_manager", ROOT / "comfyui/package_manager.py")
+    python = str(tmp_path / "ComfyUI env" / "python")
+    uv = str(tmp_path / "tools" / "uv")
+    probes = []
+    monkeypatch.setattr(
+        manager.shutil,
+        "which",
+        lambda name: (
+            uv if name == "uv" and tool in {"path-uv", "broken-path-uv"} else None
+        ),
+    )
+
+    def available(command):
+        probes.append(command)
+        if tool == "path-uv":
+            return True  # Both uv and pip exist; PATH uv must win.
+        if tool in {"module-uv", "broken-path-uv"}:
+            return command == [python, "-m", "uv"]
+        return command == [python, "-m", "pip"]
+
+    monkeypatch.setattr(manager, "_available", available)
+    if tool == "pip":
+        prefix = [python, "-m", "pip"]
+        expected_install = [*prefix, "install"]
+        expected_build = [*prefix, "wheel", "--no-deps", "--wheel-dir", str(tmp_path)]
+    else:
+        prefix = [uv] if tool == "path-uv" else [python, "-m", "uv"]
+        expected_install = [*prefix, "pip", "install", "--python", python]
+        expected_build = [
+            *prefix,
+            "build",
+            "--wheel",
+            "--python",
+            python,
+            "--out-dir",
+            str(tmp_path),
+        ]
+    assert manager.install_command(python) == expected_install
+    assert manager.wheel_command(python, tmp_path) == expected_build
+    if tool == "path-uv":
+        assert probes == [[uv], [uv]]
+
+
+@pytest.mark.parametrize(
+    "failure",
+    (
+        FileNotFoundError(),
+        subprocess.TimeoutExpired("uv", 5),
+        subprocess.CalledProcessError(1, "uv"),
+    ),
+)
+def test_package_manager_treats_failed_probes_as_unavailable(monkeypatch, failure):
+    manager = _load("spark_package_manager_probe", ROOT / "comfyui/package_manager.py")
+
+    def run(*_args, **kwargs):
+        assert kwargs["timeout"] == 5
+        raise failure
+
+    monkeypatch.setattr(manager.subprocess, "run", run)
+    assert not manager._available(["uv"])
+
+
+def test_package_manager_reports_missing_tools_without_bootstrap(monkeypatch):
+    manager = _load(
+        "spark_package_manager_missing", ROOT / "comfyui/package_manager.py"
+    )
+    monkeypatch.setattr(manager.shutil, "which", lambda _name: None)
+    calls = []
+
+    def run(command, **_kwargs):
+        calls.append(command)
+        raise subprocess.CalledProcessError(1, command)
+
+    monkeypatch.setattr(manager.subprocess, "run", run)
+    with pytest.raises(RuntimeError, match="no usable uv or pip"):
+        manager.install_command(sys.executable)
+    assert calls == [
+        [sys.executable, "-m", "uv", "--version"],
+        [sys.executable, "-m", "pip", "--version"],
+    ]
+
+
+def test_installer_preserves_install_arguments(monkeypatch, tmp_path):
+    installer = _load("spark_installer_commands", ROOT / "comfyui/install.py")
+    prefix = ["uv", "pip", "install", "--python", sys.executable]
+    targets = []
+
+    def install_command(python):
+        targets.append(python)
+        return prefix[:]
+
+    monkeypatch.setattr(installer, "install_command", install_command)
+    calls = []
+    monkeypatch.setattr(
+        installer.subprocess,
+        "run",
+        lambda command, **kwargs: calls.append((command, kwargs)),
+    )
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("packaging>=24\n", encoding="utf-8")
+    installer._install_requirements(tmp_path)
+    wheel = str(tmp_path / "backend wheel.whl")
+    installer._install(wheel, force=True)
+    assert targets == [sys.executable, sys.executable]
+    assert calls == [
+        ([*prefix, f"-r{requirements}"], {"check": True}),
+        ([*prefix, "--force-reinstall", "--no-deps", wheel], {"check": True}),
+    ]
+
+
+def test_installer_does_not_retry_failed_installs_with_another_tool(monkeypatch):
+    installer = _load("spark_installer_failure", ROOT / "comfyui/install.py")
+    selections = []
+
+    def install_command(python):
+        selections.append(python)
+        return ["uv", "pip", "install", "--python", python]
+
+    monkeypatch.setattr(installer, "install_command", install_command)
+    calls = []
+    failure = subprocess.CalledProcessError(2, "uv pip install")
+
+    def run(command, **_kwargs):
+        calls.append(command)
+        raise failure
+
+    monkeypatch.setattr(installer.subprocess, "run", run)
+    with pytest.raises(subprocess.CalledProcessError) as error:
+        installer._install("backend.whl", force=True)
+    assert error.value is failure
+    assert selections == [sys.executable]
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("use_uv", (True, False))
+@pytest.mark.parametrize("operation", ("build", "install"))
+def test_kernel_builder_preserves_target_and_cuda_settings(
+    monkeypatch,
+    tmp_path,
+    use_uv,
+    operation,
+):
+    kernel = _load("spark_kernel_commands", ROOT / "comfyui/kernel_builder.py")
+    manager = sys.modules[kernel.install_command.__module__]
+    python = str(tmp_path / "target env" / "python")
+    prefix = ["uv"] if use_uv else [python, "-m", "pip"]
+    monkeypatch.setattr(manager, "_select", lambda _python: (prefix, use_uv))
+    source = tmp_path / "source"
+    monkeypatch.setattr(kernel, "prepare_source", lambda *_args, **_kwargs: source)
+    calls = []
+    monkeypatch.setattr(
+        kernel,
+        "_run",
+        lambda command, **kwargs: calls.append((command, kwargs)),
+    )
+    kwargs = {"python": python, "kitchen_base": "0.2.36", "architecture": "sm89"}
+    if operation == "build":
+        output = tmp_path / "wheels"
+        output.mkdir()
+        wheel = (
+            output
+            / "comfy_kitchen-0.2.36+spark.h3.sm89.cu130.1-cp312-abi3-linux_x86_64.whl"
+        )
+        wheel.touch()
+        assert kernel.build_wheel(ROOT, output, **kwargs) == [wheel]
+        expected = (
+            [
+                *prefix,
+                "build",
+                "--wheel",
+                "--python",
+                python,
+                "--out-dir",
+                str(output),
+                ".",
+            ]
+            if use_uv
+            else [*prefix, "wheel", "--no-deps", "--wheel-dir", str(output), "."]
+        )
+        assert calls[0][1]["cwd"] == source
+    else:
+        kernel.install_from_source(ROOT, **kwargs)
+        expected = (
+            [*prefix, "pip", "install", "--python", python]
+            if use_uv
+            else [*prefix, "install"]
+        )
+        expected += ["--force-reinstall", "--no-deps", str(source)]
+    assert len(calls) == 1
+    assert calls[0][0] == expected
+    assert calls[0][1]["env"]["COMFY_CUDA_ARCHS"] == "89"
+
+
+@pytest.mark.parametrize("distribution", ("standalone", "registry"))
+def test_packaged_installer_uses_uv_without_pip(tmp_path, distribution):
+    uv = shutil.which("uv")
+    if uv is None:
+        pytest.skip("uv is required for the no-pip integration test")
+    builder = _load("spark_package_uv", ROOT / "tools/build_comfyui_package.py")
+    if distribution == "registry":
+        package = builder.assemble_registry(
+            tmp_path / "build",
+            version="0.1.0",
+        )
+        archive = builder.make_registry_zip(package, tmp_path, version="0.1.0")
+    else:
+        package = builder.assemble(
+            tmp_path / "build",
+            version="0.1.0",
+            publisher_id="test",
+            platform_tag="linux-x86_64",
+        )
+        archive = builder.make_zip(
+            package,
+            tmp_path,
+            version="0.1.0",
+            platform_tag="linux-x86_64",
+        )
+    unpacked = tmp_path / "unpacked"
+    with zipfile.ZipFile(archive) as bundle:
+        bundle.extractall(unpacked)
+    package = (
+        unpacked if distribution == "registry" else unpacked / builder.PACKAGE_NAME
+    )
+
+    # Use a small local wheel; this checks installation without CUDA or a network.
+    wheel = tmp_path / "spark_installer_fixture-1.0-py3-none-any.whl"
+    info = "spark_installer_fixture-1.0.dist-info"
+    files = {
+        "spark_installer_fixture.py": "VALUE = 42\n",
+        f"{info}/METADATA": "Metadata-Version: 2.1\nName: spark-installer-fixture\nVersion: 1.0\n",
+        f"{info}/WHEEL": "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+    }
+    files[f"{info}/RECORD"] = "".join(
+        f"{name},,\n" for name in (*files, f"{info}/RECORD")
+    )
+    with zipfile.ZipFile(wheel, "w") as bundle:
+        for name, content in files.items():
+            bundle.writestr(name, content)
+    (package / "requirements.txt").write_text(wheel.as_uri() + "\n", encoding="utf-8")
+    backend_asset = wheel
+    if distribution == "registry":
+        backend_asset = tmp_path / "release.zip"
+        with zipfile.ZipFile(backend_asset, "w") as bundle:
+            bundle.write(wheel, f"ComfyUI-Spark-H3/wheelhouse/{wheel.name}")
+
+    env = dict(
+        os.environ,
+        UV_OFFLINE="1",
+        UV_NO_INDEX="1",
+        UV_CACHE_DIR=str(tmp_path / "uv-cache"),
+        UV_PYTHON_DOWNLOADS="never",
+    )
+    target = tmp_path / "ComfyUI env"
+    other = tmp_path / "other project" / ".venv"
+    for venv in (target, other):
+        subprocess.run(
+            [uv, "venv", "--python", sys.executable, str(venv)],
+            check=True,
+            capture_output=True,
+            env=env,
+        )
+    relative_python = "Scripts/python.exe" if sys.platform == "win32" else "bin/python"
+    python = target / relative_python
+    env["VIRTUAL_ENV"] = str(other)
+    probe = """
+import importlib.util
+from pathlib import Path
+import sys
+assert importlib.util.find_spec('pip') is None
+assert importlib.util.find_spec('spark_installer_fixture') is None
+sys.path.insert(0, sys.argv[1])
+import install as installer
+installer._install_requirements(Path(sys.argv[1]))
+installer._wheel_matches = lambda name, *_args: name == Path(sys.argv[3]).name
+installer._install_release_asset(Path(sys.argv[2]).as_uri(), '0.2.39', 'sm120', 'cu130')
+import spark_installer_fixture
+assert spark_installer_fixture.VALUE == 42
+assert Path(spark_installer_fixture.__file__).is_relative_to(sys.prefix)
+assert importlib.util.find_spec('pip') is None
+"""
+    subprocess.run(
+        [str(python), "-I", "-c", probe, str(package), str(backend_asset), str(wheel)],
+        cwd=other.parent,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        [
+            str(other / relative_python),
+            "-I",
+            "-c",
+            "import importlib.util; assert importlib.util.find_spec('spark_installer_fixture') is None; assert importlib.util.find_spec('pip') is None",
+        ],
+        check=True,
+        capture_output=True,
+    )

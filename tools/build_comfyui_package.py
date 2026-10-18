@@ -94,6 +94,7 @@ WORKFLOWS = (
 GENERATED_FILES = {
     "comfyui/install.py": "install.py",
     "comfyui/kernel_builder.py": "kernel_builder.py",
+    "comfyui/package_manager.py": "package_manager.py",
     "comfyui/INSTALL.zh-CN.md": "INSTALL.zh-CN.md",
     "comfyui/standalone/requirements.txt": "requirements.txt",
     "comfyui/standalone/README.md": "README.md",
@@ -439,10 +440,7 @@ def _validate_kernel_wheel(
     cuda_tag: str,
     platform_tag: str,
 ) -> None:
-    try:
-        from packaging.utils import parse_wheel_filename
-    except ImportError:
-        from pip._vendor.packaging.utils import parse_wheel_filename
+    from packaging.utils import parse_wheel_filename
     try:
         distribution, version, _, tags = parse_wheel_filename(wheel.name)
     except ValueError as error:

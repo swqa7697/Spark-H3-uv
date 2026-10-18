@@ -14,6 +14,11 @@ import sys
 import tempfile
 from pathlib import Path
 
+if __package__:
+    from .package_manager import install_command, wheel_command
+else:
+    from package_manager import install_command, wheel_command
+
 KITCHEN_SOURCE = "https://github.com/Comfy-Org/comfy-kitchen.git"
 KITCHEN_TARGETS = {
     "0.2.36": {
@@ -218,7 +223,7 @@ def build_wheel(
         env["COMFY_CUDA_ARCHS"] = expected_cuda_archs
         env.setdefault("COMFY_BUILD_JOBS", "8")
         _run(
-            [python, "-m", "pip", "wheel", "--no-deps", "--wheel-dir", str(output_dir), "."],
+            [*wheel_command(python, output_dir), "."],
             cwd=source,
             env=env,
         )
@@ -263,7 +268,7 @@ def install_from_source(
         env["COMFY_CUDA_ARCHS"] = expected_cuda_archs
         env.setdefault("COMFY_BUILD_JOBS", "8")
         _run(
-            [python, "-m", "pip", "install", "--force-reinstall", "--no-deps", str(source)],
+            [*install_command(python), "--force-reinstall", "--no-deps", str(source)],
             env=env,
         )
 
