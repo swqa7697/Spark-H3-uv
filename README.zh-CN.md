@@ -113,15 +113,32 @@ Spark-H3 为 Linux 和 Windows x86_64 上的 ComfyUI 0.38.x、0.39.x 与 0.40.x 
 
 ## 🧭 项目进展与计划
 
+Diffusers 与 ComfyUI 是两条独立的实现路线。下面分开记录两者的进展，
+避免将后端算子、ComfyUI 打包和兼容性工作混为一谈。
+
+### Diffusers / Python
+
 | 状态 | 项目 | 资料 |
 |---|---|---|
-| ✅ 已提供 | 支持 SM80、SM86、SM89 和 SM120 的融合 Spark 算子 | [算子文档](h3_sparse_attention/README.md) · [性能对照表](docs/kernel_performance_matrix.md) |
-| ✅ 已提供 | 独立 ComfyUI 节点安装包，优先安装 wheel，失败时回退到源码安装 | [ComfyUI 指南](comfyui/README.md) |
-| ✅ 已提供 | 已发布的 Ref2VA 推理示例 | [Spark-Ref2VA 预览](https://zechengtang.github.io/Spark-H3/#spark-ref2va-preview) |
-| 🚧 进行中 | 在 SM120 GPU（包括 GeForce RTX 50 系列和 RTX PRO 5000/6000 Blackwell）上测试并验证 ComfyUI 实现 | — |
-| 🗓️ 计划中 | 不依赖 `comfy-kitchen` 的稳定版独立 ComfyUI 实现 | — |
-| 🗓️ 计划中 | 支持 SM90 和 SM100 的融合 Spark 算子 | 待资源到位 |
+| ✅ 已实现 | MiniMax-H3 的 Spark attention 集成，以及支持 SM80、SM86、SM89 和 SM120 的融合算子 | [使用与算子文档](h3_sparse_attention/README.md) · [性能对照表](docs/kernel_performance_matrix.md) |
+| ✅ 已实现 | Ref2VA pipeline 支持及已发布的推理示例 | [Spark-Ref2VA 预览](https://zechengtang.github.io/Spark-H3/#spark-ref2va-preview) |
+| 🗓️ 计划中 | 支持 SM90 和 SM100 的融合 Spark 算子 | 待硬件资源到位 |
 | 🗓️ 计划中 | 发布技术报告 | — |
+
+### ComfyUI
+
+| 版本 | 更新日期 | 状态 | 主要改进 / 预计更新 | 发布 / 跟踪 |
+|---|---|---|---|---|
+| v0.1.1 | 2026-10-09 | ✅ 已发布 | 首个稳定的 SM89 / SM120 Linux 安装包；修复 v0.1.0 的 CUDA Graph 分配生命周期问题；内置 5 组代表性工作流 | [发布说明](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.1) |
+| v0.1.2 | 2026-10-11 | ✅ 已发布 | 新增经过验证的 SM89 / SM120 Windows 安装包；修正内置工作流并优化 LBH 双采样示例 | [发布说明](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.2) |
+| v0.1.3 | 2026-10-13 | ✅ 已发布 | 新增经过验证的 SM86 安装包；适配 KJNodes 低显存节点；新增 `fidelity`、`speed`、`custom`、`dense` 预设及 dense 后端选择 | [发布说明](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.3) |
+| v0.1.4 | 2026-10-15 | ✅ 已发布 | 新增 ComfyUI 0.40.x 支持、面向 Ref2VA 的 `sparse_scope`、可配置 `producer_chunk` 及 Ref2VA 节点内提示 | [发布说明](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4) |
+| v0.1.5 | 待定 | 🛠️ 计划中 | 优化峰值显存占用，减少临时显存分配并改善显存复用；在保留生成质量与加速收益的前提下降低显卡持续功耗 | 显存优化 · [功耗跟踪](https://github.com/zechengtang/Spark-H3/issues/3) |
+
+当前 v0.1.4 支持 Linux 和 Windows x86_64 上的 ComfyUI 0.38.x–0.40.x，
+覆盖 SM86、SM89 和 SM120。工作流请参阅 [ComfyUI 指南](comfyui/README.md)，
+安装包详情请参阅[安装指南](comfyui/standalone/README.md)。参考视频压缩由独立的
+[Spark-VPack](comfyui/compact_ref2va/README.zh-CN.md) 提供。
 
 ## 🤝 致谢
 

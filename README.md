@@ -145,15 +145,34 @@ requirements, defaults, and options. -->
 
 ## 🧭 Project Status & Roadmap
 
+The Diffusers and ComfyUI integrations are separate implementation tracks.
+Their status is listed independently below so that backend work is not confused
+with ComfyUI packaging or compatibility work.
+
+### Diffusers / Python
+
 | Status | Item | Resources |
 |---|---|---|
-| ✅ Available | Fused Spark kernels for SM80, SM86, SM89, and SM120 | [Kernel documentation](h3_sparse_attention/README.md) · [Performance matrix](docs/kernel_performance_matrix.md) |
-| ✅ Available | Standalone ComfyUI node packaging with wheel-first installation and source fallback | [ComfyUI guide](comfyui/README.md) |
-| ✅ Available | Release Ref2VA inference examples | [Spark-Ref2VA Preview](https://zechengtang.github.io/Spark-H3/#spark-ref2va-preview) |
-| 🚧 In progress | Test and validate the ComfyUI implementation on SM120 GPUs, including GeForce RTX 50 series and RTX PRO 5000/6000 Blackwell | — |
-| 🗓️ Planned | Standalone stable ComfyUI implementation without a `comfy-kitchen` dependency | — |
-| 🗓️ Planned | Fused Spark kernels for SM90 and SM100 | Pending resources |
-| 🗓️ Planned | Release the technical report | — |
+| ✅ Available | Spark attention integration for MiniMax-H3, with fused kernels for SM80, SM86, SM89, and SM120 | [Usage and kernel documentation](h3_sparse_attention/README.md) · [Performance matrix](docs/kernel_performance_matrix.md) |
+| ✅ Available | Ref2VA pipeline support and released inference examples | [Spark-Ref2VA Preview](https://zechengtang.github.io/Spark-H3/#spark-ref2va-preview) |
+| 🗓️ Planned | Fused Spark kernels for SM90 and SM100 | Pending hardware resources |
+| 🗓️ Planned | Technical report release | — |
+
+### ComfyUI
+
+| Version | Date | Status | Main improvements / expected updates | Release / tracking |
+|---|---|---|---|---|
+| v0.1.1 | 2026-10-09 | ✅ Released | First stable Linux packages for SM89 and SM120; fixed the v0.1.0 CUDA Graph allocation-lifetime issue; bundled five representative workflows | [Release notes](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.1) |
+| v0.1.2 | 2026-10-11 | ✅ Released | Added validated Windows SM89 and SM120 packages; corrected packaged workflows and optimized the LBH two-pass example | [Release notes](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.2) |
+| v0.1.3 | 2026-10-13 | ✅ Released | Added validated SM86 packages; integrated with KJNodes low-VRAM patches; added `fidelity`, `speed`, `custom`, and `dense` presets plus selectable dense backends | [Release notes](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.3) |
+| v0.1.4 | 2026-10-15 | ✅ Released | Added ComfyUI 0.40.x support, Ref2VA-aware `sparse_scope`, configurable `producer_chunk`, and in-node Ref2VA guidance | [Release notes](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4) |
+| v0.1.5 | TBD | 🛠️ Planned | Optimize peak VRAM usage by reducing temporary allocations and improving memory reuse; reduce sustained GPU power draw while retaining quality and speed gains | VRAM optimization · [Power tracking](https://github.com/zechengtang/Spark-H3/issues/3) |
+
+The current v0.1.4 release supports ComfyUI 0.38.x–0.40.x on Linux and
+Windows x86_64 for SM86, SM89, and SM120. See the [ComfyUI guide](comfyui/README.md)
+for workflows and the [installation guide](comfyui/standalone/README.md) for
+package details. Reference-video compression is provided separately by
+[Spark-VPack](comfyui/compact_ref2va/README.md).
 
 ## 🤝 Acknowledgments
  
