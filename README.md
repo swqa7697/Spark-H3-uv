@@ -13,6 +13,7 @@
   <a href="#special-thanks"><img src="https://img.shields.io/badge/Special_Thanks-Community_Contributors-e11d48?style=flat-square" alt="Special thanks to community contributors"></a>
   <a href="h3_sparse_attention/README.md"><img src="https://img.shields.io/badge/Docs-Usage_%26_Configuration-2563eb?style=flat-square" alt="Usage and configuration guide"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-15803d?style=flat-square" alt="License: Apache 2.0"></a>
+  <a href="https://github.com/zechengtang/Spark-H3/releases"><img src="https://img.shields.io/github/downloads/zechengtang/Spark-H3/total?style=flat-square&amp;label=Downloads" alt="Total GitHub release downloads"></a>
 </p>
 
 <p>
@@ -188,6 +189,18 @@ for kernel attributions and included licenses.
 - Thanks to [Smthem](https://space.bilibili.com/439655233) for support and help during the development of Spark-H3's ComfyUI plugin.
 - Thanks to [AI绘画KK](https://space.bilibili.com/313528845) for relaying the community's requests for Windows support and providing valuable workflow cases for plugin testing.
 - Thanks to [AIwood爱屋研究室](https://space.bilibili.com/503934057) for identifying a bug when Spark-H3 was used in a two-pass sampling workflow and suggesting a switch to Kitchen as the dense backend, which further improved the plugin's speedup ratio.
+
+## ⭐ Star History
+
+<p align="center">
+  <a href="https://www.star-history.com/?repos=zechengtang%2FSpark-H3&amp;type=date&amp;legend=top-left">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=zechengtang/Spark-H3&amp;type=date&amp;theme=dark&amp;legend=top-left">
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=zechengtang/Spark-H3&amp;type=date&amp;legend=top-left">
+      <img alt="Spark-H3 GitHub star history chart" src="https://api.star-history.com/chart?repos=zechengtang/Spark-H3&amp;type=date&amp;legend=top-left" width="720">
+    </picture>
+  </a>
+</p>
 
 ## 📄 License
 

@@ -1584,3 +1584,26 @@ except ModuleNotFoundError as error:
 
 NODE_CLASS_MAPPINGS.update(REF2VA_NODE_CLASS_MAPPINGS)
 NODE_DISPLAY_NAME_MAPPINGS.update(REF2VA_NODE_DISPLAY_NAME_MAPPINGS)
+
+try:
+    if __package__:
+        from .comfyui_ref2va_bfs import (
+            NODE_CLASS_MAPPINGS as REF2VA_BFS_NODE_CLASS_MAPPINGS,
+            NODE_DISPLAY_NAME_MAPPINGS as REF2VA_BFS_NODE_DISPLAY_NAME_MAPPINGS,
+        )
+    else:
+        from comfyui_ref2va_bfs import (
+            NODE_CLASS_MAPPINGS as REF2VA_BFS_NODE_CLASS_MAPPINGS,
+            NODE_DISPLAY_NAME_MAPPINGS as REF2VA_BFS_NODE_DISPLAY_NAME_MAPPINGS,
+        )
+except ModuleNotFoundError as error:
+    optional_names = {"comfyui_ref2va_bfs"}
+    if __package__:
+        optional_names.add(f"{__package__}.comfyui_ref2va_bfs")
+    if error.name not in optional_names:
+        raise
+    REF2VA_BFS_NODE_CLASS_MAPPINGS = {}
+    REF2VA_BFS_NODE_DISPLAY_NAME_MAPPINGS = {}
+
+NODE_CLASS_MAPPINGS.update(REF2VA_BFS_NODE_CLASS_MAPPINGS)
+NODE_DISPLAY_NAME_MAPPINGS.update(REF2VA_BFS_NODE_DISPLAY_NAME_MAPPINGS)

@@ -54,6 +54,7 @@ def test_standalone_package_is_small_complete_and_importable(tmp_path):
     assert not list(package.rglob("spark_reweight_sm*.py"))
     assert not (package / "sol_attn").exists()
     assert (package / "patches/comfy-kitchen-spark-v0.2.36.patch").is_file()
+    assert (package / "patches/comfy-kitchen-spark-v0.2.39.patch").is_file()
     assert not list(package.rglob("__pycache__"))
     assert (package / "assets/adaln_curve_projection.safetensors").is_file()
     assert json.loads((package / "spark_h3_build.json").read_text()) == {
@@ -292,7 +293,7 @@ def test_standalone_zip_has_one_installable_root(tmp_path):
     wheels = tuple(
         tmp_path
         / f"comfy_kitchen-{base}+spark.h3.sm120.cu130.1-cp312-abi3-linux_x86_64.whl"
-        for base in ("0.2.36", "0.2.37")
+        for base in ("0.2.36", "0.2.37", "0.2.39")
     )
     for wheel in wheels:
         wheel.touch()
@@ -798,7 +799,7 @@ def test_kernel_builder_initializes_only_required_top_level_submodules(
             destination.mkdir()
 
     monkeypatch.setattr(kernel_builder, "_run", run)
-    monkeypatch.setattr(kernel_builder, "_patch_path", lambda _root: tmp_path / "patch")
+    monkeypatch.setattr(kernel_builder, "_patch_path", lambda _root, _base: tmp_path / "patch")
     monkeypatch.setattr(kernel_builder, "_set_local_version", lambda *_args, **_kwargs: None)
     kernel_builder.prepare_source(
         tmp_path,
@@ -918,6 +919,7 @@ def test_installer_resolves_supported_installed_base(monkeypatch):
 def test_installer_requires_opt_in_for_cu128_and_unknown_cuda(monkeypatch, capsys):
     installer = _load("spark_comfyui_installer_cuda", ROOT / "comfyui/install.py")
     torch_stub = ModuleType("torch")
+    torch_stub.__version__ = "2.12.0+cu128"
     torch_stub.version = ModuleType("torch.version")
     torch_stub.version.cuda = "12.8"
     monkeypatch.setitem(sys.modules, "torch", torch_stub)
@@ -932,7 +934,15 @@ def test_installer_requires_opt_in_for_cu128_and_unknown_cuda(monkeypatch, capsy
     assert installer._validate_runtime(experimental_cuda=True) == (12, 9)
     assert "experimental CUDA mode" in capsys.readouterr().err
     torch_stub.version.cuda = "13.0"
+    torch_stub.__version__ = "2.11.9+cu130"
+    with pytest.raises(RuntimeError, match="requires PyTorch >= 2.12"):
+        installer._validate_runtime()
+    torch_stub.__version__ = "2.12.0+cu130"
     assert installer._validate_runtime() == (13, 0)
+    torch_stub.__version__ = "2.13.0+cu130"
+    assert installer._validate_runtime() == (13, 0)
+    torch_stub.version.cuda = "13.2"
+    assert installer._validate_runtime() == (13, 2)
 
 
 def test_installer_validates_runtime_and_package_platform(monkeypatch, tmp_path):
@@ -1043,6 +1053,40 @@ def test_installer_source_build_routes_isolated_identity(
         calls[0]["cuda_tag"],
         calls[0]["cuda_archs"],
     ) == expected
+
+
+@pytest.mark.parametrize("cuda_version", ((13, 2), (13, 3), (14, 0)))
+@pytest.mark.parametrize("explicit_wheel", (False, True))
+def test_installer_automatically_tries_cu130_wheel_on_newer_cuda(
+    tmp_path, monkeypatch, cuda_version, explicit_wheel
+):
+    installer = _load("spark_comfyui_installer_cu130_experiment", ROOT / "comfyui/install.py")
+    from packaging.tags import sys_tags
+
+    wheel_tag = next(sys_tags())
+    wheel = tmp_path / "wheelhouse" / (
+        f"comfy_kitchen-0.2.39+spark.h3.sm120.cu130.1-{wheel_tag}.whl"
+    )
+    wheel.parent.mkdir()
+    wheel.touch()
+    (tmp_path / "spark_h3_build.json").write_text(json.dumps({
+        "architecture": "sm120", "cuda_tag": "cu130",
+        "platform": installer._runtime_platform_tag(),
+        "kernel_wheels": [wheel.name],
+    }), encoding="utf-8")
+    monkeypatch.setattr(installer, "_node_root", lambda: tmp_path)
+    monkeypatch.setattr(installer, "_validate_runtime", lambda **_kwargs: cuda_version)
+    monkeypatch.setattr(installer, "_cuda_capability", lambda: (12, 0))
+    monkeypatch.setattr(installer, "_backend_available", lambda *_args: False)
+    monkeypatch.setattr(installer, "_matching_release_wheel", lambda *_args: (_ for _ in ()).throw(AssertionError("unexpected download")))
+    installed = []
+    monkeypatch.setattr(installer, "_pip_install", lambda path, **_kwargs: installed.append(path))
+    monkeypatch.setattr(installer, "_validate_backend", lambda *args: installed.append(args))
+    arguments = ["--skip-dependencies", "--kitchen-base", "0.2.39"]
+    if explicit_wheel:
+        arguments += ["--wheel", str(wheel)]
+    assert installer.main(arguments) == 0
+    assert installed == [str(wheel), ("0.2.39", "sm120", "cu130")]
 
 
 def test_installer_backend_probe_ignores_stale_parent_modules(tmp_path, monkeypatch):

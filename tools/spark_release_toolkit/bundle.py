@@ -39,6 +39,11 @@ def bundle(output: Path, audit_report: Path) -> dict:
     if not audit_report.is_file():
         raise RuntimeError(f"wheel audit is required before bundling: {audit_report}")
     audit = json.loads(audit_report.read_text(encoding="utf-8"))
+    if audit.get("experimental_cuda_runtime_requested"):
+        raise RuntimeError("experimental CUDA runtime audit cannot qualify a release bundle")
+    if any(entry.get("smoke", {}).get("cuda_runtime_policy") != "release"
+           for entry in audit.get("wheels", [])):
+        raise RuntimeError("release bundle requires wheels audited with the release CUDA runtime")
     audited = {Path(entry["wheel"]).name: entry["sha256"] for entry in audit.get("wheels", [])}
     actual = {wheel.name: sha256(wheel) for wheel in wheels}
     if (not audit.get("valid") or audit.get("architecture") != ARCH

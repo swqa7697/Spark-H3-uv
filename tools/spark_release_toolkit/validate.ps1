@@ -1,12 +1,14 @@
 param(
     [Parameter(Mandatory = $true)] [string] $ComfyUIRoot,
     [Parameter(Mandatory = $true)] [string] $Python,
-    [ValidateSet("audit", "full", "compatibility")]
+    [ValidateSet("audit", "full")]
     [string] $Mode = "full",
     [string] $Results = "",
     [int] $Port = 8628,
     [ValidateRange(3, 1000)] [int] $Steps = 8,
-    [string] $LoraName = "minimax_h3_fl2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors"
+    [string] $LoraName = "minimax_h3_fl2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors",
+    [switch] $ExperimentalCudaRuntime,
+    [ValidateSet("13.2", "13.3")] [string] $TestTorchCuda
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,6 +27,11 @@ if ([string]::IsNullOrWhiteSpace($Results)) {
 $Results = [IO.Path]::GetFullPath($Results)
 New-Item -ItemType Directory -Force -Path $Results | Out-Null
 
+$previousCudaMode = [Environment]::GetEnvironmentVariable("SPARK_EXPERIMENTAL_CUDA_RUNTIME", "Process")
+$previousExpectedCuda = [Environment]::GetEnvironmentVariable("SPARK_EXPECT_TORCH_CUDA", "Process")
+$env:SPARK_EXPERIMENTAL_CUDA_RUNTIME = if ($ExperimentalCudaRuntime -or $TestTorchCuda) { "1" } else { "0" }
+$env:SPARK_EXPECT_TORCH_CUDA = $TestTorchCuda
+try {
 & $Python (Join-Path $kit "preflight.py") --report (Join-Path $Results "preflight.json")
 if ($LASTEXITCODE -ne 0) { throw "Triton/GPU preflight failed; no benchmark was run" }
 & $Python (Join-Path $kit "validate_wheels.py") --wheelhouse (Join-Path $kit "wheelhouse") --report (Join-Path $Results "wheel-validation.json")
@@ -41,10 +48,10 @@ $versionSource = Get-Content $versionFile -Raw -Encoding UTF8
 $versionMatch = [regex]::Match($versionSource, '__version__\s*=\s*["'']([0-9]+\.[0-9]+\.[0-9]+)["'']')
 if (-not $versionMatch.Success) { throw "cannot determine ComfyUI version from $versionFile" }
 $comfyVersion = $versionMatch.Groups[1].Value
-$supportedBases = @{ '0.38' = '0.2.36'; '0.39' = '0.2.37'; '0.40' = '0.2.37' }
+$supportedBases = @{ '0.38' = '0.2.36'; '0.39' = '0.2.37'; '0.40' = '0.2.37'; '0.42' = '0.2.39' }
 $comfySeries = ($comfyVersion -split '\.')[0..1] -join '.'
 if (-not $supportedBases.ContainsKey($comfySeries)) {
-    throw "ComfyUI $comfyVersion is outside this kit's validated 0.38.x/0.39.x/0.40.x range; update the kit before benchmarking"
+    throw "ComfyUI $comfyVersion is outside this kit's validated 0.38.x/0.39.x/0.40.x/0.42.x range; update the kit before benchmarking"
 }
 if ($base -ne $supportedBases[$comfySeries]) {
     throw "ComfyUI $comfyVersion requires comfy-kitchen $base, but this kit expects $($supportedBases[$comfySeries]) for $comfySeries.x"
@@ -55,8 +62,11 @@ $wheels = @(Get-ChildItem (Join-Path $kit "wheelhouse") -Filter $pattern)
 if ($wheels.Count -ne 1) { throw "expected one wheel for comfy-kitchen $base; found $($wheels.Count)" }
 & $Python -c "import requests, websocket"
 if ($LASTEXITCODE -ne 0) { throw "Python requires requests and websocket-client" }
-if (-not (Get-Command ffprobe -ErrorAction SilentlyContinue) -and $Mode -eq "full") {
+if (-not (Get-Command ffprobe -ErrorAction SilentlyContinue)) {
     throw "full validation requires ffprobe in PATH"
+}
+if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+    throw "full validation requires ffmpeg in PATH"
 }
 
 $env:COMFYUI_ROOT = $ComfyUIRoot
@@ -65,7 +75,18 @@ $env:SPARK_RESULTS = $Results
 $env:SPARK_TEST_PORT = "$Port"
 $env:SPARK_STEPS = "$Steps"
 $env:SPARK_LORA_NAME = $LoraName
-$runner = if ($Mode -eq "full") { "run_lightx2v_three_variants.py" } else { "run_comfyui_compatibility.py" }
-& $Python (Join-Path $kit $runner)
+& $Python (Join-Path $kit "run_lightx2v_three_variants.py")
 if ($LASTEXITCODE -ne 0) { throw "$Mode validation failed; see $Results" }
 Write-Host "PASS $Results"
+} finally {
+    if ($null -eq $previousCudaMode) {
+        Remove-Item Env:SPARK_EXPERIMENTAL_CUDA_RUNTIME -ErrorAction SilentlyContinue
+    } else {
+        $env:SPARK_EXPERIMENTAL_CUDA_RUNTIME = $previousCudaMode
+    }
+    if ($null -eq $previousExpectedCuda) {
+        Remove-Item Env:SPARK_EXPECT_TORCH_CUDA -ErrorAction SilentlyContinue
+    } else {
+        $env:SPARK_EXPECT_TORCH_CUDA = $previousExpectedCuda
+    }
+}

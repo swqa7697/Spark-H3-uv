@@ -12,7 +12,7 @@ import urllib.request
 import urllib.parse
 from pathlib import Path
 
-SUPPORTED_KITCHEN_BASES = ("0.2.36", "0.2.37")
+SUPPORTED_KITCHEN_BASES = ("0.2.36", "0.2.37", "0.2.39")
 SUPPORTED_ARCHITECTURES = {
     (8, 6): "sm86",
     (8, 9): "sm89",
@@ -171,8 +171,9 @@ def _resolve_kitchen_base(requested: str | None = None) -> str:
         found = "not installed" if base is None else base
         raise RuntimeError(
             f"unsupported comfy-kitchen base {found}; this package supports "
-            "ComfyUI 0.38.x (comfy-kitchen 0.2.36) and ComfyUI 0.39.x/0.40.x "
-            "(comfy-kitchen 0.2.37). Use --kitchen-base only when the target "
+            "ComfyUI 0.38.x (comfy-kitchen 0.2.36), ComfyUI 0.39.x/0.40.x "
+            "(comfy-kitchen 0.2.37), and ComfyUI 0.42.x "
+            "(comfy-kitchen 0.2.39). Use --kitchen-base only when the target "
             "ComfyUI version is known."
         )
     return base
@@ -226,6 +227,15 @@ def _validate_runtime(*, experimental_cuda: bool = False) -> tuple[int, int]:
             "your ComfyUI environment. Install that build before this node; do "
             "not replace ComfyUI's torch package with a generic dependency."
         ) from error
+    try:
+        from packaging.version import Version
+    except ImportError:
+        from pip._vendor.packaging.version import Version
+    torch_version = Version(torch.__version__)
+    if torch_version < Version("2.12"):
+        raise RuntimeError(
+            f"Spark-H3 requires PyTorch >= 2.12, found {torch.__version__}"
+        )
     cuda_text = torch.version.cuda
     if cuda_text is None:
         raise RuntimeError("Spark-H3 requires a CUDA-enabled PyTorch build")
@@ -233,7 +243,7 @@ def _validate_runtime(*, experimental_cuda: bool = False) -> tuple[int, int]:
         cuda_version = tuple(int(part) for part in cuda_text.split(".")[:2])
     except ValueError as error:
         raise RuntimeError(f"cannot parse PyTorch CUDA version {cuda_text!r}") from error
-    if cuda_version not in SUPPORTED_RELEASE_CUDA:
+    if cuda_version < (13, 0):
         message = (
             f"PyTorch CUDA {cuda_text} is not in the Spark-H3 release matrix "
             f"{sorted(SUPPORTED_RELEASE_CUDA)}"
@@ -250,6 +260,12 @@ def _validate_runtime(*, experimental_cuda: bool = False) -> tuple[int, int]:
             "and its performance must not be compared with the CU130 release.",
             file=sys.stderr,
             flush=True,
+        )
+    elif cuda_version not in SUPPORTED_RELEASE_CUDA:
+        print(
+            f"[Spark-H3] PyTorch CUDA {cuda_text} is newer than the cu130 wheel target; "
+            "installation will try the wheel and verify its native entry point.",
+            file=sys.stderr, flush=True,
         )
     return cuda_version
 
@@ -353,7 +369,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--experimental-cuda",
         action="store_true",
-        help="opt in to a CUDA target outside the release matrix; requires --wheel or --source",
+        help="opt in to a CUDA runtime older than 13.0; newer runtimes need no flag",
     )
     parser.add_argument(
         "--no-source-fallback",
@@ -364,7 +380,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--kitchen-base",
         choices=SUPPORTED_KITCHEN_BASES,
-        help="override automatic selection for ComfyUI 0.38.x, 0.39.x, or 0.40.x",
+        help="override automatic selection for ComfyUI 0.38.x, 0.39.x, 0.40.x, or 0.42.x",
     )
     parser.add_argument(
         "--release-api",
@@ -375,11 +391,12 @@ def main(argv: list[str] | None = None) -> int:
     if not args.skip_dependencies:
         _install_requirements(root)
     cuda_version = _validate_runtime(experimental_cuda=args.experimental_cuda)
-    cuda_tag = _cuda_tag(cuda_version)
+    runtime_cuda_tag = _cuda_tag(cuda_version)
     platform_tag = _runtime_platform_tag()
-    experimental_runtime = cuda_version not in SUPPORTED_RELEASE_CUDA
+    older_cuda = cuda_version < (13, 0)
+    newer_cuda = cuda_version > (13, 0)
     requested_wheel = args.wheel or os.environ.get("SPARK_H3_KERNEL_WHEEL")
-    if experimental_runtime and not (args.source or requested_wheel):
+    if older_cuda and not (args.source or requested_wheel):
         raise RuntimeError(
             "experimental CUDA installs require an explicit --wheel or --source; "
             "automatic release-wheel discovery is disabled"
@@ -393,46 +410,60 @@ def main(argv: list[str] | None = None) -> int:
             f"SM{capability[0]}{capability[1]}"
         )
     if (architecture, cuda_version) not in SUPPORTED_RELEASE_TARGETS:
-        if not args.experimental_cuda:
+        if older_cuda and not args.experimental_cuda:
             raise RuntimeError(
                 f"{architecture.upper()} with CUDA {cuda_version[0]}.{cuda_version[1]} "
                 "is not in the Spark-H3 release matrix"
             )
-        experimental_runtime = True
-        if not (args.source or requested_wheel):
+        if older_cuda and not (args.source or requested_wheel):
             raise RuntimeError(
                 "experimental CUDA installs require an explicit --wheel or --source; "
                 "automatic release-wheel discovery is disabled"
             )
+    kitchen_base = _resolve_kitchen_base(args.kitchen_base)
+    cuda_tag = runtime_cuda_tag
+    if requested_wheel is not None and not args.source:
+        candidate_tags = (runtime_cuda_tag, DEFAULT_RELEASE_CUDA_TAG) if newer_cuda else (runtime_cuda_tag,)
+        cuda_tag = next(
+            (tag for tag in candidate_tags
+             if _wheel_matches(requested_wheel, kitchen_base, architecture, tag)),
+            "",
+        )
+        if not cuda_tag:
+            raise RuntimeError(
+                f"wheel {requested_wheel!r} does not match comfy-kitchen {kitchen_base} "
+                f"for {architecture.upper()}, CUDA {runtime_cuda_tag} or this Python platform"
+            )
+    elif newer_cuda and not args.source:
+        cuda_tag = DEFAULT_RELEASE_CUDA_TAG
     _validate_package_identity(
         root,
         architecture=architecture,
         cuda_tag=cuda_tag,
         platform_tag=platform_tag,
     )
-    kitchen_base = _resolve_kitchen_base(args.kitchen_base)
     print(
         f"[Spark-H3] target comfy-kitchen base: {kitchen_base}; "
         f"kernel architecture: {architecture.upper()}; CUDA tag: {cuda_tag}; "
+        f"PyTorch CUDA: {cuda_version[0]}.{cuda_version[1]}; "
         f"platform: {platform_tag}",
         flush=True,
     )
+    if cuda_tag != runtime_cuda_tag:
+        print(
+            f"[Spark-H3] EXPERIMENTAL: trying {cuda_tag} wheel with PyTorch "
+            f"CUDA {cuda_version[0]}.{cuda_version[1]}; runtime compatibility is unverified.",
+            file=sys.stderr, flush=True,
+        )
     if (
         _backend_available(kitchen_base, architecture, cuda_tag)
-        and not args.wheel
+        and not requested_wheel
         and not args.source
     ):
         print("[Spark-H3] compatible Spark comfy-kitchen backend is already installed.")
         return 0
 
     wheel = requested_wheel
-    if wheel is not None and not _wheel_matches(
-        wheel, kitchen_base, architecture, cuda_tag
-    ):
-        raise RuntimeError(
-            f"wheel {wheel!r} does not match comfy-kitchen {kitchen_base} "
-            f"for {architecture.upper()} or this Python platform"
-        )
     if wheel is None and not args.source:
         local = _matching_local_wheel(root, kitchen_base, architecture, cuda_tag)
         wheel = str(local) if local is not None else None
@@ -450,6 +481,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.no_source_fallback:
         raise RuntimeError("no compatible Spark-H3 kernel wheel is available")
+    if newer_cuda and not args.source:
+        raise RuntimeError(
+            f"no {cuda_tag} wheel was found for {architecture.upper()} and comfy-kitchen "
+            f"{kitchen_base}; provide a matching wheel with --wheel"
+        )
 
     print("[Spark-H3] no compatible wheel found; compiling the pinned source backend.")
     try:

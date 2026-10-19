@@ -13,6 +13,7 @@
   <a href="#special-thanks"><img src="https://img.shields.io/badge/Special_Thanks-Community_Contributors-e11d48?style=flat-square" alt="特别感谢社区贡献者"></a>
   <a href="h3_sparse_attention/README.md"><img src="https://img.shields.io/badge/Docs-Usage_%26_Configuration-2563eb?style=flat-square" alt="使用与配置指南"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-15803d?style=flat-square" alt="Apache 2.0 许可证"></a>
+  <a href="https://github.com/zechengtang/Spark-H3/releases"><img src="https://img.shields.io/github/downloads/zechengtang/Spark-H3/total?style=flat-square&amp;label=Downloads" alt="GitHub Release 累计下载量"></a>
 </p>
 
 <p>
@@ -151,6 +152,18 @@ Diffusers 与 ComfyUI 是两条独立的实现路线。下面分开记录两者�
 - 感谢 [Smthem](https://space.bilibili.com/439655233) 在 Spark-H3 的 ComfyUI 插件开发过程中给予的支持与帮助；
 - 感谢 [AI绘画KK](https://space.bilibili.com/313528845) 反馈了社区对 Windows 适配的需求，并为插件测试提供了宝贵的 workflow 案例；
 - 感谢 [AIwood爱屋研究室](https://space.bilibili.com/503934057) 指出了 Spark-H3 应用于双采工作流时出现的一个 Bug，并提出了将 dense backend 切换为 Kitchen 的宝贵改进建议，使插件的加速比得到进一步提升。
+
+## ⭐ Star History
+
+<p align="center">
+  <a href="https://www.star-history.com/?repos=zechengtang%2FSpark-H3&amp;type=date&amp;legend=top-left">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=zechengtang/Spark-H3&amp;type=date&amp;theme=dark&amp;legend=top-left">
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=zechengtang/Spark-H3&amp;type=date&amp;legend=top-left">
+      <img alt="Spark-H3 GitHub Star 历史曲线" src="https://api.star-history.com/chart?repos=zechengtang/Spark-H3&amp;type=date&amp;legend=top-left" width="720">
+    </picture>
+  </a>
+</p>
 
 ## 📄 许可证
 
