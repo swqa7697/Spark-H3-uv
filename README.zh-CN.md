@@ -35,6 +35,11 @@
 > ComfyUI 0.38.x–0.40.x 的 wheel。
 > **[查看发布说明并下载](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.5)**
 
+> **ComfyUI v0.1.4：** 新增 ComfyUI 0.40.x 支持，并为带视频条件的
+> Ref2VA 提供 `sparse_scope=joint-video`，同时新增可选的 `producer_chunk`
+> 用于控制 Spark Q/K/V producer 分块。
+> **[查看发布说明并下载](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4)**
+
 > **Spark-VPack v0.1.0：** 独立的 ComfyUI 插件，用于压缩原生 Ref2VA 任务中的参考视频；
 > 推荐使用默认的 `2/5`。
 > **[查看发布说明并下载](https://github.com/zechengtang/Spark-H3/releases/tag/spark-vpack-v0.1.0)**

@@ -35,6 +35,10 @@
 > also includes wheels for ComfyUI 0.38.x–0.40.x.
 > **[Release notes and downloads](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.5)**
 
+> **ComfyUI v0.1.4:** Adds ComfyUI 0.40.x support and
+> `sparse_scope=joint-video` for video-conditioned Ref2VA.
+> **[Release notes and downloads](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4)**
+
 > **Spark-VPack v0.1.0:** A separate ComfyUI plugin that compresses reference
 > videos in native Ref2VA workflows.
 > **[Release notes and download](https://github.com/zechengtang/Spark-H3/releases/tag/spark-vpack-v0.1.0)**
