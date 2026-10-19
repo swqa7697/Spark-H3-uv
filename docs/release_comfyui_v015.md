@@ -2,7 +2,7 @@
 
 ## 中文
 
-v0.1.5 新增对 ComfyUI 0.42.x（comfy-kitchen 0.2.39）的支持。本次提供 Linux SM120、Windows SM89 和 Windows SM120 安装包。每份 ZIP 都内置对应平台及 GPU 架构的三个 wheel：0.2.36 用于 ComfyUI 0.38.x，0.2.37 用于 0.39.x/0.40.x，0.2.39 用于 0.42.x。
+v0.1.5 新增对 ComfyUI 0.42.x（comfy-kitchen 0.2.39）的支持。现提供 Linux 和 Windows 上的 SM86、SM89、SM120 共六个安装包。每份 ZIP 都内置对应平台及 GPU 架构的三个 wheel：0.2.36 用于 ComfyUI 0.38.x，0.2.37 用于 0.39.x/0.40.x，0.2.39 用于 0.42.x。
 
 安装器要求 Python 3.12+、PyTorch 2.12+ 和 PyTorch CUDA 13.0+。wheel 以 CUDA 13.0 构建；更新的 PyTorch/CUDA 运行时可以直接尝试安装，并接受原生入口检查，但仍需在目标环境中验证完整工作流与性能。
 
@@ -10,7 +10,10 @@ v0.1.5 新增对 ComfyUI 0.42.x（comfy-kitchen 0.2.39）的支持。本次提�
 
 | 平台 | GPU 架构 | 安装包 |
 | --- | --- | --- |
+| Linux x86_64 | SM86 · RTX 30 系 | `ComfyUI-Spark-H3-0.1.5-linux-x86_64-sm86-cu130.zip` |
+| Linux x86_64 | SM89 · RTX 40 系 | `ComfyUI-Spark-H3-0.1.5-linux-x86_64-sm89-cu130.zip` |
 | Linux x86_64 | SM120 · RTX 50 系 | `ComfyUI-Spark-H3-0.1.5-linux-x86_64-sm120-cu130.zip` |
+| Windows x86_64 | SM86 · RTX 30 系 | `ComfyUI-Spark-H3-0.1.5-windows-x86_64-sm86-cu130.zip` |
 | Windows x86_64 | SM89 · RTX 40 系 | `ComfyUI-Spark-H3-0.1.5-windows-x86_64-sm89-cu130.zip` |
 | Windows x86_64 | SM120 · RTX 50 系 | `ComfyUI-Spark-H3-0.1.5-windows-x86_64-sm120-cu130.zip` |
 
@@ -18,7 +21,7 @@ v0.1.5 新增对 ComfyUI 0.42.x（comfy-kitchen 0.2.39）的支持。本次提�
 
 ## English
 
-v0.1.5 adds ComfyUI 0.42.x support through comfy-kitchen 0.2.39. The available packages target Linux SM120, Windows SM89, and Windows SM120. Each ZIP also bundles the matching comfy-kitchen 0.2.36 wheel for ComfyUI 0.38.x and 0.2.37 wheel for 0.39.x/0.40.x.
+v0.1.5 adds ComfyUI 0.42.x support through comfy-kitchen 0.2.39. Packages are available for SM86, SM89, and SM120 on both Linux and Windows. Each ZIP also bundles the matching comfy-kitchen 0.2.36 wheel for ComfyUI 0.38.x and 0.2.37 wheel for 0.39.x/0.40.x.
 
 The installer requires Python 3.12+, PyTorch 2.12+, and PyTorch CUDA 13.0+. The wheels were built with CUDA 13.0. Newer PyTorch/CUDA runtimes may try the bundled wheel without an opt-in flag; installation checks the native entry point, while full workflow and performance compatibility require testing on the target runtime.
 

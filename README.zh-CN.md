@@ -31,8 +31,8 @@
 </div>
 
 > **ComfyUI v0.1.5：** 新增对 ComfyUI 0.42.x（comfy-kitchen 0.2.39）的支持，
-> 提供 Linux SM120、Windows SM89/SM120 安装包；包内也包含适配 ComfyUI
-> 0.38.x–0.40.x 的 wheel。
+> 提供 Linux 和 Windows 的 SM86、SM89、SM120 安装包；每包也包含适配
+> ComfyUI 0.38.x–0.40.x 的 wheel。
 > **[查看发布说明并下载](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.5)**
 
 > **Spark-VPack v0.1.0：** 独立的 ComfyUI 插件，用于压缩原生 Ref2VA 任务中的参考视频；
@@ -99,7 +99,7 @@ with install_h3_spark_attn(
 
 ## 🧩 ComfyUI 安装
 
-Spark-H3 为 ComfyUI 0.38.x–0.40.x 和 0.42.x 提供独立节点。[v0.1.5](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.5) 新增 ComfyUI 0.42.x 支持，提供 Linux x86_64 SM120、Windows x86_64 SM89/SM120 安装包；这些包也支持 ComfyUI 0.38.x–0.40.x。Linux SM86/SM89 和 Windows SM86 如使用 ComfyUI 0.38.x–0.40.x，请下载 [v0.1.4](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4)。请选择与操作系统和 GPU 架构匹配的 CUDA 13.0 安装包。发布包不包含 ComfyUI 和模型权重。
+Spark-H3 为 ComfyUI 0.38.x–0.40.x 和 0.42.x 提供独立节点。[v0.1.5](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.5) 新增 ComfyUI 0.42.x 支持，提供 Linux 和 Windows x86_64 的 SM86、SM89、SM120 安装包；每包也支持 ComfyUI 0.38.x–0.40.x。请选择与操作系统和 GPU 架构匹配的 CUDA 13.0 安装包。发布包不包含 ComfyUI 和模型权重。
 
 安装方法及示例工作流请参阅 [ComfyUI 指南](comfyui/README.md) 或 [中文安装指南](comfyui/INSTALL.zh-CN.md)。
 
@@ -134,11 +134,10 @@ Diffusers 与 ComfyUI 是两条独立的实现路线。下面分开记录两者�
 | v0.1.2 | 2026-10-11 | ✅ 已发布 | 新增经过验证的 SM89 / SM120 Windows 安装包；修正内置工作流并优化 LBH 双采样示例 | [发布说明](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.2) |
 | v0.1.3 | 2026-10-13 | ✅ 已发布 | 新增经过验证的 SM86 安装包；适配 KJNodes 低显存节点；新增 `fidelity`、`speed`、`custom`、`dense` 预设及 dense 后端选择 | [发布说明](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.3) |
 | v0.1.4 | 2026-10-15 | ✅ 已发布 | 新增 ComfyUI 0.40.x 支持、面向 Ref2VA 的 `sparse_scope`、可配置 `producer_chunk` 及 Ref2VA 节点内提示 | [发布说明](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4) |
-| v0.1.5 | 2026-10-19 | ✅ 已发布 | 通过 comfy-kitchen 0.2.39 新增 ComfyUI 0.42.x 支持；发布 Linux SM120 和 Windows SM89/SM120 安装包，每包也内置适配 ComfyUI 0.38.x–0.40.x 的 wheel | [发布说明](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.5) |
+| v0.1.5 | 2026-10-19 | ✅ 已发布 | 通过 comfy-kitchen 0.2.39 新增 ComfyUI 0.42.x 支持；发布 Linux 和 Windows 的 SM86/SM89/SM120 安装包，每包也内置适配 ComfyUI 0.38.x–0.40.x 的 wheel | [发布说明](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.5) |
 | v0.1.6 | 待定 | 🛠️ 计划中 | 优化峰值显存占用，减少临时显存分配并改善显存复用；在保留生成质量与加速收益的前提下降低显卡持续功耗 | 显存优化 · [功耗跟踪](https://github.com/zechengtang/Spark-H3/issues/3) |
 
-当前 v0.1.5 的 Linux SM120、Windows SM89/SM120 安装包支持 ComfyUI 0.38.x–0.40.x 和 0.42.x。
-v0.1.4 的 Linux SM86/SM89 和 Windows SM86 安装包继续支持 ComfyUI 0.38.x–0.40.x。
+当前 v0.1.5 的 Linux 和 Windows x86_64 SM86/SM89/SM120 安装包支持 ComfyUI 0.38.x–0.40.x 和 0.42.x。
 工作流请参阅 [ComfyUI 指南](comfyui/README.md)，
 安装包详情请参阅[安装指南](comfyui/standalone/README.md)。参考视频压缩由独立的
 [Spark-VPack](comfyui/compact_ref2va/README.zh-CN.md) 提供。

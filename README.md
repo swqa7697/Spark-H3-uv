@@ -31,8 +31,8 @@
 </div>
 
 > **ComfyUI v0.1.5:** Adds support for ComfyUI 0.42.x (comfy-kitchen 0.2.39),
-> with Linux SM120 and Windows SM89/SM120 packages. The packages also include
-> wheels for ComfyUI 0.38.x–0.40.x.
+> with Linux and Windows packages for SM86, SM89, and SM120. Each package
+> also includes wheels for ComfyUI 0.38.x–0.40.x.
 > **[Release notes and downloads](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.5)**
 
 > **Spark-VPack v0.1.0:** A separate ComfyUI plugin that compresses reference
@@ -105,10 +105,8 @@ with install_h3_spark_attn(
 
 Spark-H3 provides standalone nodes for ComfyUI 0.38.x–0.40.x and 0.42.x.
 **[v0.1.5](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.5)**
-adds ComfyUI 0.42.x support with Linux x86_64 SM120 and Windows x86_64
-SM89/SM120 packages; these packages also support ComfyUI 0.38.x–0.40.x.
-For Linux SM86/SM89 and Windows SM86 with ComfyUI 0.38.x–0.40.x, use
-**[v0.1.4](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4)**.
+adds ComfyUI 0.42.x support with Linux and Windows x86_64 packages for
+SM86, SM89, and SM120. Each package also supports ComfyUI 0.38.x–0.40.x.
 Choose the CUDA 13.0 package matching your operating system and GPU
 architecture. ComfyUI and model weights are not included.
 
@@ -168,12 +166,11 @@ with ComfyUI packaging or compatibility work.
 | v0.1.2 | 2026-10-11 | ✅ Released | Added validated Windows SM89 and SM120 packages; corrected packaged workflows and optimized the LBH two-pass example | [Release notes](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.2) |
 | v0.1.3 | 2026-10-13 | ✅ Released | Added validated SM86 packages; integrated with KJNodes low-VRAM patches; added `fidelity`, `speed`, `custom`, and `dense` presets plus selectable dense backends | [Release notes](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.3) |
 | v0.1.4 | 2026-10-15 | ✅ Released | Added ComfyUI 0.40.x support, Ref2VA-aware `sparse_scope`, configurable `producer_chunk`, and in-node Ref2VA guidance | [Release notes](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4) |
-| v0.1.5 | 2026-10-19 | ✅ Released | Added ComfyUI 0.42.x support through comfy-kitchen 0.2.39; released Linux SM120 and Windows SM89/SM120 packages, each also bundling wheels for ComfyUI 0.38.x–0.40.x | [Release notes](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.5) |
+| v0.1.5 | 2026-10-19 | ✅ Released | Added ComfyUI 0.42.x support through comfy-kitchen 0.2.39; released Linux and Windows SM86/SM89/SM120 packages, each also bundling wheels for ComfyUI 0.38.x–0.40.x | [Release notes](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.5) |
 | v0.1.6 | TBD | 🛠️ Planned | Optimize peak VRAM usage by reducing temporary allocations and improving memory reuse; reduce sustained GPU power draw while retaining quality and speed gains | VRAM optimization · [Power tracking](https://github.com/zechengtang/Spark-H3/issues/3) |
 
 The current v0.1.5 release supports ComfyUI 0.38.x–0.40.x and 0.42.x with
-Linux SM120 and Windows SM89/SM120 packages. The v0.1.4 packages remain
-available for Linux SM86/SM89 and Windows SM86 on ComfyUI 0.38.x–0.40.x.
+Linux and Windows x86_64 packages for SM86, SM89, and SM120.
 See the [ComfyUI guide](comfyui/README.md)
 for workflows and the [installation guide](comfyui/standalone/README.md) for
 package details. Reference-video compression is provided separately by
