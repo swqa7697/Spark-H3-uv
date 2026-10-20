@@ -41,7 +41,7 @@
 
 > **Spark-VPack v0.1.0:** A separate ComfyUI plugin that compresses reference
 > videos in native Ref2VA workflows.
-> **[Release notes and download](https://github.com/zechengtang/Spark-H3/releases/tag/spark-vpack-v0.1.0)**
+> **[VPack GitHub repository](https://github.com/zechengtang/VPack)**
 
 > 👉 [Ref2VA 任务加速解决方案](docs/sparse_scope.md#ref2va-任务加速解决方案)
 
@@ -118,7 +118,7 @@ For installation and example workflows, see the **[ComfyUI guide](comfyui/README
 or **[中文安装指南](comfyui/INSTALL.zh-CN.md)**.
 
 For reference-video compression in native Ref2VA workflows, install the separate
-**[Spark-VPack v0.1.0](https://github.com/zechengtang/Spark-H3/releases/tag/spark-vpack-v0.1.0)** plugin.
+**[Spark-VPack v0.1.0](https://github.com/zechengtang/VPack)** plugin.
 
 ## Step-count convention
 

@@ -42,7 +42,7 @@
 
 > **Spark-VPack v0.1.0：** 独立的 ComfyUI 插件，用于压缩原生 Ref2VA 任务中的参考视频；
 > 推荐使用默认的 `2/5`。
-> **[查看发布说明并下载](https://github.com/zechengtang/Spark-H3/releases/tag/spark-vpack-v0.1.0)**
+> **[VPack GitHub 仓库](https://github.com/zechengtang/VPack)**
 
 > 👉 [Ref2VA 任务加速解决方案](docs/sparse_scope.md#ref2va-任务加速解决方案)
 
@@ -108,7 +108,7 @@ Spark-H3 为 ComfyUI 0.38.x–0.40.x 和 0.42.x 提供独立节点。[v0.1.5](ht
 
 安装方法及示例工作流请参阅 [ComfyUI 指南](comfyui/README.md) 或 [中文安装指南](comfyui/INSTALL.zh-CN.md)。
 
-如需压缩原生 Ref2VA 任务中的参考视频，可另行安装独立插件 **[Spark-VPack v0.1.0](https://github.com/zechengtang/Spark-H3/releases/tag/spark-vpack-v0.1.0)**。
+如需压缩原生 Ref2VA 任务中的参考视频，可另行安装独立插件 **[Spark-VPack v0.1.0](https://github.com/zechengtang/VPack)**。
 
 ## 步数约定
 
