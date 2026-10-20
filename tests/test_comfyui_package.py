@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import math
 import subprocess
@@ -71,7 +72,7 @@ def test_standalone_package_is_small_complete_and_importable(tmp_path):
     assert "Operating System :: OS Independent" in metadata["project"]["classifiers"]
     assert "Operating System :: POSIX :: Linux" not in metadata["project"]["classifiers"]
     assert metadata["tool"]["comfy"]["PublisherId"] == "test-publisher"
-    assert metadata["tool"]["comfy"]["requires-comfyui"] == ">=0.38.0,<0.41.0"
+    assert metadata["tool"]["comfy"]["requires-comfyui"] == ">=0.38.0,<0.43.0"
 
     assert {
         "spark_h3_vdn8_14p4s_t2va.json",
@@ -322,41 +323,28 @@ def test_standalone_zip_has_one_installable_root(tmp_path):
     }.issubset(names)
 
 
-def test_registry_package_is_cross_platform_and_self_contained(tmp_path):
+def test_registry_package_routes_kitchen_wheels_to_releases(tmp_path):
     builder = _load(
         "build_comfyui_registry_package", ROOT / "tools/build_comfyui_package.py"
     )
-    wheels = []
-    for base in ("0.2.36", "0.2.37"):
-        for architecture in ("sm86", "sm89", "sm120"):
-            for platform_tag, wheel_platform in (
-                ("linux-x86_64", "linux_x86_64"),
-                ("windows-x86_64", "win_amd64"),
-            ):
-                wheel = tmp_path / (
-                    f"comfy_kitchen-{base}+spark.h3.{architecture}.cu130.1-"
-                    f"cp312-abi3-{wheel_platform}.whl"
-                )
-                wheel.touch()
-                wheels.append(wheel)
-
     package = builder.assemble_registry(
         tmp_path / "output",
         version="0.1.3",
         publisher_id="zechengtang",
-        kernel_wheels=tuple(wheels),
     )
     metadata = tomllib.loads((package / "pyproject.toml").read_text())
     assert metadata["project"]["name"] == "comfyui-spark-h3"
     assert metadata["project"]["version"] == "0.1.3"
     assert metadata["project"]["requires-python"] == ">=3.12"
     assert metadata["tool"]["comfy"]["PublisherId"] == "zechengtang"
-    assert len(list((package / "wheelhouse").glob("*.whl"))) == 12
+    assert not (package / "wheelhouse").exists()
     identity = json.loads((package / "spark_h3_build.json").read_text())
     assert identity["distribution"] == "registry"
     assert identity["architectures"] == ["sm120", "sm86", "sm89"]
     assert identity["platforms"] == ["linux-x86_64", "windows-x86_64"]
-    assert len(identity["kernel_wheels"]) == 12
+    assert identity["kernel_wheels"] == []
+    assert identity["backend_source"] == "github-release"
+    assert identity["backend_release_tag"] == "comfyui-v0.1.5"
 
     workflows = list((package / "workflows").glob("*.json"))
     assert len(workflows) == 15
@@ -385,23 +373,53 @@ def test_registry_package_is_cross_platform_and_self_contained(tmp_path):
     assert not any(name.startswith("ComfyUI-Spark-H3/") for name in names)
 
 
-def test_registry_package_requires_complete_wheel_matrix(tmp_path):
-    builder = _load(
-        "build_comfyui_registry_package_coverage",
-        ROOT / "tools/build_comfyui_package.py",
-    )
-    wheel = (
-        tmp_path
-        / "comfy_kitchen-0.2.37+spark.h3.sm120.cu130.1-cp312-abi3-linux_x86_64.whl"
-    )
-    wheel.touch()
-    with pytest.raises(ValueError, match="Registry wheel coverage mismatch"):
-        builder.assemble_registry(
-            tmp_path / "output",
-            version="0.1.3",
-            publisher_id="zechengtang",
-            kernel_wheels=(wheel,),
-        )
+def test_installer_routes_release_archive_to_matching_kitchen_wheel(tmp_path, monkeypatch):
+    installer = _load("spark_comfyui_installer_release_archive", ROOT / "comfyui/install.py")
+    from packaging.tags import sys_tags
+
+    wheel_tag = next(sys_tags())
+    matching = f"comfy_kitchen-0.2.39+spark.h3.sm120.cu130.1-{wheel_tag}.whl"
+    other = f"comfy_kitchen-0.2.37+spark.h3.sm120.cu130.1-{wheel_tag}.whl"
+    archive_path = tmp_path / "ComfyUI-Spark-H3-0.1.5-linux-x86_64-sm120-cu130.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(f"ComfyUI-Spark-H3/wheelhouse/{matching}", b"matching-wheel")
+        archive.writestr(f"ComfyUI-Spark-H3/wheelhouse/{other}", b"other-wheel")
+
+    release = {"assets": [{"name": archive_path.name, "browser_download_url": archive_path.as_uri()}]}
+    monkeypatch.setattr(installer.urllib.request, "urlopen", lambda *_args, **_kwargs: io.BytesIO(json.dumps(release).encode()))
+    monkeypatch.setattr(installer, "_runtime_platform_tag", lambda: "linux-x86_64")
+    url = installer._matching_release_wheel("https://example.invalid/release", "0.2.39", "sm120", "cu130")
+    assert url == archive_path.as_uri()
+    installed = []
+    monkeypatch.setattr(installer.urllib.request, "urlopen", lambda *_args, **_kwargs: archive_path.open("rb"))
+    monkeypatch.setattr(installer, "_pip_install", lambda path, **_kwargs: installed.append((Path(path).name, Path(path).read_bytes())))
+    installer._install_release_asset(url, "0.2.39", "sm120", "cu130")
+    assert installed == [(matching, b"matching-wheel")]
+
+
+def test_registry_installer_uses_pinned_backend_release(tmp_path, monkeypatch):
+    installer = _load("spark_comfyui_installer_registry_route", ROOT / "comfyui/install.py")
+    (tmp_path / "spark_h3_build.json").write_text(json.dumps({
+        "distribution": "registry",
+        "architectures": ["sm120"],
+        "platforms": [installer._runtime_platform_tag()],
+        "cuda_tag": "cu130",
+        "kernel_wheels": [],
+        "backend_release_tag": "comfyui-v0.1.5",
+    }), encoding="utf-8")
+    monkeypatch.setattr(installer, "_node_root", lambda: tmp_path)
+    monkeypatch.setattr(installer, "_validate_runtime", lambda **_kwargs: (13, 0))
+    monkeypatch.setattr(installer, "_cuda_capability", lambda: (12, 0))
+    monkeypatch.setattr(installer, "_backend_available", lambda *_args: False)
+    monkeypatch.setattr(installer, "_validate_backend", lambda *_args: None)
+    calls = []
+    monkeypatch.setattr(installer, "_matching_release_wheel", lambda *args: calls.append(args) or "https://example.invalid/release.zip")
+    monkeypatch.setattr(installer, "_install_release_asset", lambda *args: calls.append(args))
+    assert installer.main(["--skip-dependencies", "--kitchen-base", "0.2.39"]) == 0
+    assert calls == [
+        (installer.RELEASE_API_PREFIX + "comfyui-v0.1.5", "0.2.39", "sm120", "cu130"),
+        ("https://example.invalid/release.zip", "0.2.39", "sm120", "cu130"),
+    ]
 
 
 def test_release_package_keeps_cu128_and_cu129_experimental():

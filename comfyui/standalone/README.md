@@ -42,6 +42,14 @@ Model weights are not bundled. Use ComfyUI's native MiniMax-H3 model files.
 
 Chinese instructions: [ComfyUI 中文安装指南](INSTALL.zh-CN.md).
 
+The Comfy Registry package contains the node and workflows, without bundled
+backend wheels. When installed through ComfyUI Manager, its `install.py` runs
+in the ComfyUI Python environment and selects the Spark-enabled comfy-kitchen
+wheel from the selected GitHub Release archive using the installed
+comfy-kitchen version, operating system, GPU architecture, and CUDA version.
+This requires access to GitHub Releases during installation. A matching local wheel can be
+supplied with `install.py --wheel` for offline installation.
+
 This release provides the following architecture-specific archives:
 
 | GPU | CUDA toolkit | Release archive |

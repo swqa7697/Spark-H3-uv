@@ -6,10 +6,13 @@ from importlib import metadata
 import json
 import os
 import platform
+import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.request
 import urllib.parse
+import zipfile
 from pathlib import Path
 
 SUPPORTED_KITCHEN_BASES = ("0.2.36", "0.2.37", "0.2.39")
@@ -31,13 +34,8 @@ SUPPORTED_RELEASE_TARGETS = {
 }
 DEFAULT_RELEASE_CUDA_TAG = "cu130"
 PACKAGE_BUILD_IDENTITY = "spark_h3_build.json"
-DEFAULT_RELEASE_APIS = {
-    base: (
-        "https://api.github.com/repos/zechengtang/Spark-H3/releases/tags/"
-        f"comfy-kitchen-spark-v{base}-1"
-    )
-    for base in SUPPORTED_KITCHEN_BASES
-}
+DEFAULT_BACKEND_RELEASE_TAG = "comfyui-v0.1.5"
+RELEASE_API_PREFIX = "https://api.github.com/repos/zechengtang/Spark-H3/releases/tags/"
 
 BACKEND_PROBE = (
     "from importlib.metadata import version\n"
@@ -330,7 +328,38 @@ def _matching_release_wheel(
         name = asset.get("name", "")
         if _wheel_matches(name, kitchen_base, architecture, cuda_tag):
             return asset.get("browser_download_url")
+    platform_tag = _runtime_platform_tag()
+    archive_suffix = f"-{platform_tag}-{architecture}-{cuda_tag}.zip"
+    for asset in release.get("assets", ()):
+        if asset.get("name", "").endswith(archive_suffix):
+            return asset.get("browser_download_url")
     return None
+
+
+def _install_release_asset(
+    url: str, kitchen_base: str, architecture: str, cuda_tag: str
+) -> None:
+    if not urllib.parse.urlparse(url).path.endswith(".zip"):
+        _pip_install(url, force=True)
+        return
+    with tempfile.TemporaryDirectory(prefix="spark-h3-kitchen-") as temporary:
+        archive_path = Path(temporary) / "release.zip"
+        request = urllib.request.Request(url, headers={"User-Agent": "ComfyUI-Spark-H3"})
+        with urllib.request.urlopen(request, timeout=120) as response:
+            with archive_path.open("wb") as destination:
+                shutil.copyfileobj(response, destination)
+        with zipfile.ZipFile(archive_path) as archive:
+            matches = [
+                name for name in archive.namelist()
+                if _wheel_matches(Path(name).name, kitchen_base, architecture, cuda_tag)
+            ]
+            if len(matches) != 1:
+                raise RuntimeError(
+                    f"expected one matching comfy-kitchen wheel in {url}, found {len(matches)}"
+                )
+            wheel = Path(temporary) / Path(matches[0]).name
+            wheel.write_bytes(archive.read(matches[0]))
+        _pip_install(str(wheel), force=True)
 
 
 def _install_requirements(root: Path) -> None:
@@ -459,7 +488,10 @@ def main(argv: list[str] | None = None) -> int:
         local = _matching_local_wheel(root, kitchen_base, architecture, cuda_tag)
         wheel = str(local) if local is not None else None
     if wheel is None and not args.source:
-        release_api = args.release_api or DEFAULT_RELEASE_APIS[kitchen_base]
+        identity_path = root / PACKAGE_BUILD_IDENTITY
+        identity = json.loads(identity_path.read_text(encoding="utf-8")) if identity_path.is_file() else {}
+        release_tag = identity.get("backend_release_tag", DEFAULT_BACKEND_RELEASE_TAG)
+        release_api = args.release_api or RELEASE_API_PREFIX + release_tag
         try:
             wheel = _matching_release_wheel(
                 release_api, kitchen_base, architecture, cuda_tag
@@ -467,7 +499,10 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as error:
             print(f"[Spark-H3] release-wheel lookup failed: {error}", file=sys.stderr)
     if wheel is not None:
-        _pip_install(wheel, force=True)
+        if wheel == requested_wheel or Path(wheel).is_file():
+            _pip_install(wheel, force=True)
+        else:
+            _install_release_asset(wheel, kitchen_base, architecture, cuda_tag)
         _validate_backend(kitchen_base, architecture, cuda_tag)
         return 0
     if args.no_source_fallback:

@@ -17,6 +17,12 @@
 wheel。安装器按当前 ComfyUI 版本选择对应 wheel。选择安装包时以 ZIP 内的
 `spark_h3_build.json` 和 `wheelhouse/` 为准。
 
+通过 Comfy Registry 安装时，Registry 包不附带 wheel。ComfyUI Manager 会执行
+包内的 `install.py`，由安装器依据当前 comfy-kitchen 版本、系统、GPU 架构和
+CUDA 版本，从 `spark_h3_build.json` 指定的 GitHub Release 平台 ZIP 中提取
+匹配的 Kitchen wheel。此方式安装时需要访问 GitHub Releases；离线环境可手动
+运行 `install.py --wheel /path/to/匹配的.whl`。
+
 ## 快速安装
 
 ### 1. 选择正确的 ZIP
