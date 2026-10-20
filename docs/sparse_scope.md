@@ -152,7 +152,7 @@ Spark-H3 v0.1.3 默认使用 `sparse_scope=target-video`，因此 Ref2VA 的参�
 
 Ref2VA 用户可以安装 [Spark-H3 v0.1.4](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4)，并将 `sparse_scope` 设置为 `joint-video`。这样，多时间位置的参考视频视觉 token 会与目标视频共同进入 Spark 稀疏域，从而减少参考视频保持 dense 带来的额外开销。
 
-独立插件 [Spark-VPack v0.1.0](https://github.com/zechengtang/VPack) 用于压缩 Ref2VA 任务中的参考视频，推荐默认档位为 `2/5`；可按需与 Spark-H3 一起使用。
+独立插件 [VPack v0.1.0](https://github.com/zechengtang/VPack) 用于压缩 Ref2VA 任务中的参考视频，推荐默认档位为 `2/5`；可按需与 Spark-H3 一起使用。
 
 ## 对照摘要
 

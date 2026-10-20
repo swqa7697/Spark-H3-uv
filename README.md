@@ -39,7 +39,7 @@
 > `sparse_scope=joint-video` for video-conditioned Ref2VA.
 > **[Release notes and downloads](https://github.com/zechengtang/Spark-H3/releases/tag/comfyui-v0.1.4)**
 
-> **Spark-VPack v0.1.0:** A separate ComfyUI plugin that compresses reference
+> **VPack v0.1.0:** A separate ComfyUI plugin that compresses reference
 > videos in native Ref2VA workflows.
 > **[VPack GitHub repository](https://github.com/zechengtang/VPack)**
 
@@ -118,7 +118,7 @@ For installation and example workflows, see the **[ComfyUI guide](comfyui/README
 or **[中文安装指南](comfyui/INSTALL.zh-CN.md)**.
 
 For reference-video compression in native Ref2VA workflows, install the separate
-**[Spark-VPack v0.1.0](https://github.com/zechengtang/VPack)** plugin.
+**[VPack v0.1.0](https://github.com/zechengtang/VPack)** plugin.
 
 ## Step-count convention
 
@@ -178,7 +178,7 @@ Linux and Windows x86_64 packages for SM86, SM89, and SM120.
 See the [ComfyUI guide](comfyui/README.md)
 for workflows and the [installation guide](comfyui/standalone/README.md) for
 package details. Reference-video compression is provided separately by
-[Spark-VPack](comfyui/compact_ref2va/README.md).
+[VPack](comfyui/compact_ref2va/README.md).
 
 ## 🤝 Acknowledgments
  

@@ -1,6 +1,6 @@
-# Spark-VPack 0.1.0 Release Notes
+# VPack 0.1.0 Release Notes
 
-Spark-VPack compresses the reference videos used by ComfyUI's native MiniMax H3 Ref2VA task, shortening the sequence processed by the DiT. It supports ComfyUI 0.38.0 and newer.
+VPack compresses the reference videos used by ComfyUI's native MiniMax H3 Ref2VA task, shortening the sequence processed by the DiT. It supports ComfyUI 0.38.0 and newer.
 
 | Compression ratio | Description |
 | --- | --- |
@@ -13,4 +13,4 @@ We recommend `2/5`. In a single 4-step, 768p ikun test on an SM120 GPU, the char
 
 ## Usage
 
-Place the `Spark-VPack` folder in `ComfyUI/custom_nodes/` and restart ComfyUI. Connect the native Ref2VA node's `positive` output and the model's `MODEL` output to Spark-VPack, then connect its outputs back into the sampling workflow. Keep the generation latent connected directly to the sampler.
+Place the `VPack` folder in `ComfyUI/custom_nodes/` and restart ComfyUI. Connect the native Ref2VA node's `positive` output and the model's `MODEL` output to VPack, then connect its outputs back into the sampling workflow. Keep the generation latent connected directly to the sampler.

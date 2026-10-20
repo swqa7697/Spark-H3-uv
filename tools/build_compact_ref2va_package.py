@@ -1,4 +1,4 @@
-"""Assemble the independent Spark-VPack ComfyUI package."""
+"""Assemble the independent VPack ComfyUI package."""
 from __future__ import annotations
 
 import argparse
@@ -7,7 +7,7 @@ import zipfile
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-PACKAGE_NAME = "Spark-VPack"
+PACKAGE_NAME = "VPack"
 DEFAULT_VERSION = "0.1.0"
 SOURCE_ROOT = REPOSITORY_ROOT / "comfyui" / "compact_ref2va"
 
