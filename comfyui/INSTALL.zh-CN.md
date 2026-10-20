@@ -6,7 +6,7 @@
 
 - ComfyUI 0.38.x、0.39.x、0.40.x 或 0.42.x，且已包含原生 MiniMax-H3 支持。
 - Linux 或 Windows x86_64。
-- Python 3.12+、PyTorch 2.12+、PyTorch CUDA 13.0+，以及支持 CUDA BF16 的 NVIDIA GPU。
+- Python 3.12+、支持 CUDA 的 PyTorch（`torch.version.cuda >= 13.0`），以及支持 CUDA BF16 的 NVIDIA GPU。安装器不检查 PyTorch 版本号。
 - SM86：GeForce RTX 30 系。
 - SM89：GeForce RTX 40 系。
 - SM120：GeForce RTX 50 系及 RTX PRO 5000/6000 Blackwell。
@@ -35,7 +35,7 @@ wheel。安装器按当前 ComfyUI 版本选择对应 wheel。选择安装包时
 - `sm86`、`sm89` 或 `sm120`：GPU 架构。
 - `cu130`：wheel 以 CUDA 13.0 构建。
 
-不同操作系统或 GPU 架构的 ZIP 和后端 wheel 不能混用。安装器要求 PyTorch ≥ 2.12、PyTorch CUDA ≥ 13.0；较新版本可直接尝试包内 cu130 wheel，无需额外参数。能安装不代表新版本组合已完成完整工作流验证。
+不同操作系统或 GPU 架构的 ZIP 和后端 wheel 不能混用。安装器只检查 PyTorch CUDA ≥ 13.0，不限制 PyTorch 版本号；较新 CUDA 版本可直接尝试包内 cu130 wheel，无需额外参数。能安装不代表该 PyTorch/CUDA 组合已完成完整工作流验证。
 
 ### 2. 关闭 ComfyUI 并解压
 

@@ -227,15 +227,6 @@ def _validate_runtime(*, experimental_cuda: bool = False) -> tuple[int, int]:
             "your ComfyUI environment. Install that build before this node; do "
             "not replace ComfyUI's torch package with a generic dependency."
         ) from error
-    try:
-        from packaging.version import Version
-    except ImportError:
-        from pip._vendor.packaging.version import Version
-    torch_version = Version(torch.__version__)
-    if torch_version < Version("2.12"):
-        raise RuntimeError(
-            f"Spark-H3 requires PyTorch >= 2.12, found {torch.__version__}"
-        )
     cuda_text = torch.version.cuda
     if cuda_text is None:
         raise RuntimeError("Spark-H3 requires a CUDA-enabled PyTorch build")

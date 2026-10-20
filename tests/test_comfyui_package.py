@@ -935,8 +935,7 @@ def test_installer_requires_opt_in_for_cu128_and_unknown_cuda(monkeypatch, capsy
     assert "experimental CUDA mode" in capsys.readouterr().err
     torch_stub.version.cuda = "13.0"
     torch_stub.__version__ = "2.11.9+cu130"
-    with pytest.raises(RuntimeError, match="requires PyTorch >= 2.12"):
-        installer._validate_runtime()
+    assert installer._validate_runtime() == (13, 0)
     torch_stub.__version__ = "2.12.0+cu130"
     assert installer._validate_runtime() == (13, 0)
     torch_stub.__version__ = "2.13.0+cu130"

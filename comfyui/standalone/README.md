@@ -116,7 +116,7 @@ python ComfyUI-Spark-H3/install.py --experimental-cuda --source
 The SM120 source path uses CUDA 12.8's `120a` target. This path is not a release
 asset and must not be represented as release-supported.
 
-The installer accepts PyTorch 2.12 or newer with PyTorch CUDA 13.0 or newer.
+The installer does not check the PyTorch version number; it requires a CUDA-enabled PyTorch build with `torch.version.cuda >= 13.0`.
 It automatically tries the packaged cu130 wheel on newer runtimes without an
 extra flag. It checks the wheel's platform, Python tag, GPU architecture and
 comfy-kitchen base, then probes the native entry point after installation.
