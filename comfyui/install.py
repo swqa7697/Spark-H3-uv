@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-from importlib import metadata
 import json
 import os
 import platform
@@ -10,10 +9,16 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import urllib.request
 import urllib.parse
+import urllib.request
 import zipfile
+from importlib import metadata
 from pathlib import Path
+
+if __package__:
+    from .package_manager import install_command
+else:
+    from package_manager import install_command
 
 SUPPORTED_KITCHEN_BASES = ("0.2.36", "0.2.37", "0.2.39")
 SUPPORTED_ARCHITECTURES = {
@@ -259,8 +264,8 @@ def _validate_runtime(*, experimental_cuda: bool = False) -> tuple[int, int]:
     return cuda_version
 
 
-def _pip_install(specification: str, *, force: bool = False) -> None:
-    command = [sys.executable, "-m", "pip", "install"]
+def _install(specification: str, *, force: bool = False) -> None:
+    command = install_command(sys.executable)
     if force:
         command.extend(("--force-reinstall", "--no-deps"))
     command.append(specification)
@@ -269,12 +274,8 @@ def _pip_install(specification: str, *, force: bool = False) -> None:
 
 
 def _wheel_metadata(filename: str):
-    try:
-        from packaging.tags import sys_tags
-        from packaging.utils import parse_wheel_filename
-    except ImportError:
-        from pip._vendor.packaging.tags import sys_tags
-        from pip._vendor.packaging.utils import parse_wheel_filename
+    from packaging.tags import sys_tags
+    from packaging.utils import parse_wheel_filename
     try:
         name = Path(urllib.parse.unquote(urllib.parse.urlparse(filename).path)).name
         distribution, version, _, tags = parse_wheel_filename(name)
@@ -340,7 +341,7 @@ def _install_release_asset(
     url: str, kitchen_base: str, architecture: str, cuda_tag: str
 ) -> None:
     if not urllib.parse.urlparse(url).path.endswith(".zip"):
-        _pip_install(url, force=True)
+        _install(url, force=True)
         return
     with tempfile.TemporaryDirectory(prefix="spark-h3-kitchen-") as temporary:
         archive_path = Path(temporary) / "release.zip"
@@ -359,13 +360,13 @@ def _install_release_asset(
                 )
             wheel = Path(temporary) / Path(matches[0]).name
             wheel.write_bytes(archive.read(matches[0]))
-        _pip_install(str(wheel), force=True)
+        _install(str(wheel), force=True)
 
 
 def _install_requirements(root: Path) -> None:
     requirements = _requirements(root)
     if requirements is not None:
-        _pip_install(f"-r{requirements}")
+        _install(f"-r{requirements}")
 
 
 def _validate_backend(
@@ -500,7 +501,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[Spark-H3] release-wheel lookup failed: {error}", file=sys.stderr)
     if wheel is not None:
         if wheel == requested_wheel or Path(wheel).is_file():
-            _pip_install(wheel, force=True)
+            _install(wheel, force=True)
         else:
             _install_release_asset(wheel, kitchen_base, architecture, cuda_tag)
         _validate_backend(kitchen_base, architecture, cuda_tag)

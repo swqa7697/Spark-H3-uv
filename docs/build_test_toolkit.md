@@ -98,3 +98,10 @@ python -m pytest -q tests/test_spark_release_toolkit.py
 
 该测试检查 kit 生成、平台选择和归档组装；实际 CUDA 编译与 GPU
 推理结果须在目标机器上执行上述编译和验证命令取得。
+
+使用 uv 开发环境时，也可在仓库根目录运行：
+
+```bash
+uv run --locked --extra test python -m pytest -q \
+  tests/test_spark_release_toolkit.py
+```

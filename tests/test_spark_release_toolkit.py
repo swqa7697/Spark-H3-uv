@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-import json
 import ast
 import hashlib
 import importlib.util
+import json
 import os
 import subprocess
 import sys
 import types
+import venv
 import zipfile
 from pathlib import Path
 
 import pytest
-
 
 ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = ROOT / "tools" / "build_spark_release_toolkit.py"
@@ -303,3 +303,149 @@ def test_generated_linux_kit_uses_linux_wheels_and_entrypoints(tmp_path):
     )
     assert experimental_package.returncode != 0
     assert "experimental CUDA runtime audit" in experimental_package.stderr
+
+
+@pytest.fixture
+def linux_kit(tmp_path):
+    kit = tmp_path / "linux-kit"
+    subprocess.run(
+        [
+            sys.executable,
+            str(GENERATOR),
+            "--architecture",
+            "sm120",
+            "--platform",
+            "linux",
+            "--publisher-id",
+            "test-publisher",
+            "--output",
+            str(kit),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return kit
+
+
+@pytest.fixture
+def symlinked_python(tmp_path):
+    environment = tmp_path / "ComfyUI env"
+    venv.EnvBuilder(with_pip=False, symlinks=True).create(environment)
+    python = environment / (
+        "Scripts/python.exe" if sys.platform == "win32" else "bin/python"
+    )
+    if not python.is_symlink():
+        pytest.skip("requires a symlinked virtual environment Python")
+    return python
+
+
+PYTHON_PROBE = """\
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+Path(__file__).with_suffix('.probe.json').write_text(json.dumps({
+    'prefix': sys.prefix,
+    'pip_available': importlib.util.find_spec('pip') is not None,
+}), encoding='utf-8')
+if '--require-build-toolkit' in sys.argv:
+    report = Path(sys.argv[sys.argv.index('--report') + 1])
+    toolkit = Path(__file__).parent / 'cuda'
+    report.write_text(json.dumps({'build_toolkit': {
+        'toolkit_root': str(toolkit),
+        'compiler': str(toolkit / 'bin/nvcc'),
+    }}), encoding='utf-8')
+"""
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"), reason="Linux kit entrypoints"
+)
+@pytest.mark.parametrize("entrypoint", ("build", "validate"))
+@pytest.mark.parametrize("relative", (False, True))
+def test_kit_entrypoints_preserve_virtualenv(
+    linux_kit, symlinked_python, entrypoint, relative
+):
+    kit = linux_kit
+    child = "kernel_builder" if entrypoint == "build" else "validate_wheels"
+    child_path = kit / (
+        f"ComfyUI-Spark-H3/{child}.py" if entrypoint == "build" else f"{child}.py"
+    )
+    (kit / "preflight.py").write_text(PYTHON_PROBE, encoding="utf-8")
+    child_path.write_text(PYTHON_PROBE, encoding="utf-8")
+    python = (
+        os.path.relpath(symlinked_python, kit) if relative else str(symlinked_python)
+    )
+    if entrypoint == "build":
+        wheel = (
+            kit
+            / "wheelhouse/comfy_kitchen-0.2.37+spark.h3.sm120.cu130.1-cp312-abi3-linux_x86_64.whl"
+        )
+        wheel.write_bytes(b"test wheel")
+        command = [
+            str(symlinked_python),
+            "-c",
+            "import build; build.shutil.which = lambda name: 'test-tool'; build.main()",
+            "--python",
+            python,
+            "--kitchen-base",
+            "0.2.37",
+        ]
+    else:
+        command = [
+            str(symlinked_python),
+            str(kit / "validate.py"),
+            "--python",
+            python,
+            "--mode",
+            "audit",
+        ]
+    result = subprocess.run(
+        command, cwd=kit, check=False, capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stderr
+    for script in (kit / "preflight.py", child_path):
+        probe = json.loads(
+            script.with_suffix(".probe.json").read_text(encoding="utf-8")
+        )
+        assert (
+            Path(probe["prefix"]).resolve() == symlinked_python.parent.parent.resolve()
+        )
+        assert not probe["pip_available"]
+
+
+def test_runner_launches_comfyui_with_virtualenv(linux_kit, symlinked_python):
+    kit = linux_kit
+    (kit / "main.py").write_text(PYTHON_PROBE, encoding="utf-8")
+    env = {
+        **os.environ,
+        "COMFYUI_ROOT": str(kit),
+        "SPARK_WHEEL": str(
+            kit
+            / "wheelhouse/comfy_kitchen-0.2.37+spark.h3.sm120.cu130.1-cp312-abi3-linux_x86_64.whl"
+        ),
+    }
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import os,subprocess,sys; sys.executable = sys.argv[1]; "
+                "import run_lightx2v_three_variants as bench; "
+                "raise SystemExit(bench.launch_server("
+                "os.environ.copy(), subprocess.DEVNULL).wait(timeout=10))"
+            ),
+            str(symlinked_python),
+        ],
+        cwd=kit,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    probe = json.loads((kit / "main.probe.json").read_text(encoding="utf-8"))
+    assert Path(probe["prefix"]).resolve() == symlinked_python.parent.parent.resolve()
+    assert not probe["pip_available"]

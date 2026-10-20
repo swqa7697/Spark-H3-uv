@@ -101,6 +101,11 @@ unzip /path/to/ComfyUI-Spark-H3-<version>-linux-x86_64-sm120-cu130.zip  # SM120 
 /path/to/ComfyUI/.venv/bin/python ComfyUI-Spark-H3/install.py
 ```
 
+The installer prefers `uv` on PATH, then the target Python's `uv` module,
+then its existing `pip`. uv operations explicitly target the ComfyUI Python.
+uv-managed environments do not need pip. The installer does not install
+either tool automatically. ComfyUI Manager runs the same installer.
+
 For a supported environment that needs a local source build:
 
 ```bash
